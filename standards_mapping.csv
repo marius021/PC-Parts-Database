@@ -1,0 +1,12 @@
+raw_column,grup
+socket,SOCKET_CPU
+cpu_socket,SOCKET_CPU
+processor_socket,SOCKET_CPU
+mb_socket,SOCKET_CPU
+memory_type,MEM_TYPE
+ram_type,MEM_TYPE
+form_factor,FORM_FACTOR_MB
+mb_form_factor,FORM_FACTOR_MB
+interface,INTERFATA
+bus,INTERFATA
+storage_form,STORAGE_FORM
