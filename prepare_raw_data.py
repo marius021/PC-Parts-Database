@@ -1,5 +1,6 @@
 import pandas as pd
 from pathlib import Path
+import re
 
 BASE = Path(r"C:\Users\Maurice\Desktop\BDDT\Proiect")
 PCPART_DIR = BASE / "raw_data" / "pc-part-dataset"   # zip GitHub extras aici (conține un subfolder 'data', dar căutăm recursiv)
@@ -68,6 +69,27 @@ def normalize_df(df, categorie_hint=None):
             break
     if "socket" not in df.columns: df["socket"] = None
 
+    def norm_socket(val: str | None) -> str | None:
+        if not isinstance(val, str):
+            return None
+        v = val.strip().upper()
+        # scoate cuvinte de umplutură
+        v = v.replace("SOCKET", " ").replace("CPU", " ").replace("PROCESSOR", " ")
+        v = re.sub(r"\(.*?\)", " ", v)         # elimină paranteze
+        v = re.sub(r"[^A-Z0-9 ]", " ", v)      # caractere non-alfa
+        v = re.sub(r"\s+", " ", v).strip()
+
+        # extrage patternuri cunoscute
+        if "AM5" in v:
+            return "AM5"
+        m = re.search(r"\bLGA\s*([0-9]{3,5})\b", v)
+        if m:
+            return f"LGA{m.group(1)}"
+        m = re.search(r"\bAM([2-5])\b", v)     # AM4, AM3 etc.
+        if m:
+            return f"AM{m.group(1)}"
+        return v or None
+
     # memory type
     mem_col = pick("memory_type","memorytype","ram_type","memory")
     df["memory_type"] = mem_col.astype(str) if mem_col is not None else None
@@ -126,6 +148,8 @@ for c in ["cod_sku","denumire","categorie","producator","socket","memory_type","
     merged[c] = merged[c].astype(str).str.strip().replace({"nan": None, "None": None, "": None})
 
 # completări minime
+merged["socket"] = merged["socket"].apply(norm_socket)
+
 merged["status"] = "ACTIV"
 merged["garantie_luni"] = 24
 
