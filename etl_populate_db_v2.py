@@ -9,6 +9,7 @@ INPUT_CSV  = BASE / "products_raw.csv"          # fișierul creat de prepare_raw
 OUTPUT_SQL = BASE / "output" / "populate.sql"   # unde vrei INSERT-urile
 MAPPING_CSV = BASE / "standards_mapping.csv"    # mappingul pentru standarde
 
+
 # Optional: a mapping file to convert raw column names into STANDARD "grup" values
 # Example rows:
 # raw_column,grup
@@ -17,7 +18,7 @@ MAPPING_CSV = BASE / "standards_mapping.csv"    # mappingul pentru standarde
 # form_factor,FORM_FACTOR_MB
 # interface,INTERFATA
 # storage_form,STORAGE_FORM
-MAPPING_CSV = Path("/mnt/data/standards_mapping.csv")  # can be absent
+
 
 # ---------------------
 # Expected core columns in INPUT_CSV (others are optional):
@@ -67,20 +68,40 @@ def main():
     # Standards mapping (optional but recommended)
     standards_map = {}
     if MAPPING_CSV.exists():
-        mapdf = pd.read_csv(MAPPING_CSV)
-        mapdf = mapdf.dropna(subset=["raw_column","grup"])
-        for _, r in mapdf.iterrows():
-            standards_map[str(r["raw_column"]).strip()] = str(r["grup"]).strip()
+    # detectează delimitatorul și BOM
+        import csv
+        with open(MAPPING_CSV, "r", encoding="utf-8-sig", newline="") as f:
+            sample = f.read(4096)
+            f.seek(0)
+            dialect = csv.Sniffer().sniff(sample, delimiters=",;|\t")
+            reader = csv.DictReader(f, dialect=dialect)
+            for row in reader:
+                raw_col = (row.get("raw_column") or row.get("RAW_COLUMN") or "").strip()
+                grup    = (row.get("grup")       or row.get("GRUP")       or "").strip()
+                if raw_col and grup:
+                    standards_map[raw_col] = grup
+    else:
+        print(f"[ETL] WARNING: mapping file not found at {MAPPING_CSV}")
+
+    print("[ETL] mapping loaded:", standards_map)
+    #debug lines
+    print("[ETL] Mapping loaded:", standards_map)
+    print("[ETL] Columns from CSV:", list(df.columns))
+    print("[ETL] Sample socket values:", df['socket'].dropna().unique()[:10])
+
+
 
     # Build STANDARD dimension from mapped columns
     std_records = []
     for raw_col, grup in standards_map.items():
-        if raw_col in df.columns:
-            colvals = df[raw_col].dropna().astype(str).str.strip()
-            colvals = colvals[colvals!=""]
-            for cod in sorted(colvals.unique()):
-                std_records.append({"grup": grup, "cod": cod})
-
+     if raw_col in df.columns:
+        colvals = (df[raw_col]
+                   .astype(str)
+                   .str.strip()
+                   .replace({"": None, "nan": None, "None": None}))
+        colvals = colvals.dropna()
+        for cod in sorted(colvals.unique()):
+            std_records.append({"grup": grup, "cod": cod})
     dim_standard = pd.DataFrame(std_records).drop_duplicates().reset_index(drop=True)
     if not dim_standard.empty:
         dim_standard["standard_id"] = dim_standard.index + 1
@@ -106,23 +127,22 @@ def main():
     ps_links = []
     for raw_col, grup in standards_map.items():
         if raw_col in df.columns and not dim_standard.empty:
-            # lookup for this group
-            group_std = dim_standard[dim_standard["grup"]==grup]
-            lut = dict(zip(zip([grup]*len(group_std), group_std["cod"]), group_std["standard_id"]))
+            group_std = dim_standard[dim_standard["grup"] == grup]
+            lut = { (grup, str(cod)): sid for cod, sid in zip(group_std["cod"], group_std["standard_id"]) }
             for i, val in df[raw_col].items():
-                if pd.isna(val) or str(val).strip()=="":
+                v = str(val).strip()
+                if not v or v.lower() in ("none","nan"):
                     continue
-                key = (grup, str(val).strip())
-                std_id = lut.get(key)
+                std_id = lut.get((grup, v))
                 if std_id:
-                    ps_links.append({"produs_id": int(df.at[i,"produs_id"]), "standard_id": int(std_id)})
+                    ps_links.append({"produs_id": int(df.at[i, "produs_id"]), "standard_id": int(std_id)})
 
     if ps_links:
         ps_df = pd.DataFrame(ps_links).drop_duplicates().reset_index(drop=True)
     else:
         ps_df = pd.DataFrame(columns=["produs_id","standard_id"])
-
     # Write INSERTs in dependency order
+    
     lines = []
 
     # PRODUCATOR
@@ -155,7 +175,8 @@ def main():
     # PRODUS_STANDARD
     for _, r in ps_df.iterrows():
         lines.append(f"INSERT INTO PRODUS_STANDARD(produs_id, standard_id) VALUES ({int(r.produs_id)}, {int(r.standard_id)});")
-
+        print(f"[ETL] STANDARD rows: {len(dim_standard)}")
+        print(f"[ETL] PRODUS_STANDARD links: {len(ps_df)}")
     # STOC
     stoc_cols = {"depozit_id","cantitate","prag_minim"}
     if stoc_cols.issubset(df.columns):
@@ -166,6 +187,7 @@ def main():
 
     OUTPUT_SQL.write_text("\n".join(lines), encoding="utf-8")
     print(f"Generated {len(lines)} SQL INSERT statements -> {OUTPUT_SQL}")
+    
 
 if __name__ == '__main__':
     main()
