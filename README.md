@@ -18,6 +18,10 @@ This project implements a relational database for a **PC components supplier** u
 3. Execute `schema_oracle.sql` then `output/populate.sql` in Oracle (FREEPDB1).
 4. Check the data using example queries in `quickcheck.sql` (optional).
 
+## ⚒️ Work in Progress Status
+- Implemented script to populate tables with data from different merged datasets.
+- Implemented script to populate tables with a minimum ammount of data.
+- 
 ## 📊 Example Queries
 
 ```sql
