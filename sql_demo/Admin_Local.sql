@@ -114,3 +114,30 @@ END;
 /
 
 GRANT EXECUTE ON pcparts.ADAUGA_COMANDA_COMPLETA TO AGENT_VANZARI;
+
+
+
+-- ====== IMPLEMENTARE ISTORIC COMENZI ====================
+
+
+-- 1. Creăm o vedere care calculează TOTALUL per comandă
+CREATE OR REPLACE VIEW pcparts.V_ISTORIC_SUMAR AS
+SELECT 
+    cv.cv_id,
+    c.nume AS nume_client,
+    cv.data_creare,
+    cv.metoda_livrare,
+    cv.status,
+    -- Calculam suma totală a liniilor comenzii
+    (SELECT SUM(l.cantitate * l.pret_unitar * (1 - l.discount/100)) 
+     FROM pcparts.CV_LINIE l 
+     WHERE l.cv_id = cv.cv_id) AS valoare_totala
+FROM pcparts.COMANDA_VANZARE cv
+JOIN pcparts.CLIENT c ON cv.client_id = c.client_id
+ORDER BY cv.cv_id DESC;
+
+-- 2. Dăm drepturi Agentului să vadă acest istoric
+GRANT SELECT ON pcparts.V_ISTORIC_SUMAR TO AGENT_VANZARI;
+
+-- 3. Creăm sinonimul public
+CREATE OR REPLACE PUBLIC SYNONYM V_ISTORIC_SUMAR FOR pcparts.V_ISTORIC_SUMAR;
