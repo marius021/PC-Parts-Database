@@ -78,6 +78,7 @@ class LoginPage(tk.Frame):
                    command=lambda: controller.show_frame("AgentPage")).pack(pady=10)
 
 # ================= ADMIN PAGE =================
+
 class AdminPage(tk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent)
@@ -95,17 +96,169 @@ class AdminPage(tk.Frame):
         content = tk.Frame(self, bg=COLOR_BG, padx=20, pady=20)
         content.pack(fill="both", expand=True)
 
-        # Notebook
-        nb = ttk.Notebook(content)
-        nb.pack(fill="both", expand=True)
+        # Notebook (Tab-uri)
+        self.notebook = ttk.Notebook(content)
+        self.notebook.pack(fill="both", expand=True)
         
-        self.tab_clienti = tk.Frame(nb, bg="white", padx=20, pady=20)
-        nb.add(self.tab_clienti, text=" Gestionare Clienți ")
-        
+        # Tab 1: Clienti
+        self.tab_clienti = tk.Frame(self.notebook, bg="white", padx=20, pady=20)
+        self.notebook.add(self.tab_clienti, text=" 👥 Gestionare Clienți ")
         self.build_clienti_ui()
 
+        # Tab 2: Stocuri (NOU)
+        self.tab_stocuri = tk.Frame(self.notebook, bg="white", padx=20, pady=20)
+        self.notebook.add(self.tab_stocuri, text=" 📦 Gestiune Stocuri & Aprovizionare ")
+        self.build_stocuri_ui()
+        
+        # Eveniment la schimbarea tab-ului (pentru refresh date)
+        self.notebook.bind("<<NotebookTabChanged>>", self.on_tab_change)
+
+    def on_tab_change(self, event):
+        # Facem refresh în funcție de tab-ul activ
+        selected_tab = self.notebook.index(self.notebook.select())
+        if selected_tab == 0:
+            self.refresh_clienti()
+        elif selected_tab == 1:
+            self.refresh_stocuri()
+
+    # ================= UI TAB STOCURI (NOU) =================
+    def build_stocuri_ui(self):
+        # 1. Filtre și KPI
+        frm_top = tk.Frame(self.tab_stocuri, bg="white")
+        frm_top.pack(fill="x", pady=(0, 10))
+
+        tk.Label(frm_top, text="Filtrează după Depozit:", bg="white", font=("Segoe UI", 10, "bold")).pack(side="left")
+        self.combo_depozit = ttk.Combobox(frm_top, state="readonly", width=25)
+        self.combo_depozit.pack(side="left", padx=10)
+        self.combo_depozit.bind("<<ComboboxSelected>>", lambda e: self.refresh_stocuri())
+
+        self.lbl_total_val = tk.Label(frm_top, text="Valoare Totală Stoc: 0 RON", bg="#ecf0f1", fg=COLOR_PRIMARY, font=("Segoe UI", 10, "bold"), padx=10, pady=5)
+        self.lbl_total_val.pack(side="right")
+
+        # 2. Tabel Stocuri
+        cols = ("PRODUS", "SKU", "DEPOZIT", "CANTITATE", "PRET UNITAR", "VALOARE")
+        self.tree_stoc = ttk.Treeview(self.tab_stocuri, columns=cols, show="headings", height=12)
+        
+        for c in cols: self.tree_stoc.heading(c, text=c)
+        self.tree_stoc.column("CANTITATE", width=80, anchor="center")
+        self.tree_stoc.column("VALOARE", width=100, anchor="e")
+        self.tree_stoc.column("DEPOZIT", width=150)
+        
+        self.tree_stoc.pack(fill="both", expand=True)
+        
+        # 3. Zona Aprovizionare (Jos)
+        frm_action = tk.LabelFrame(self.tab_stocuri, text="Acțiuni Aprovizionare", bg="white", font=("Segoe UI", 10, "bold"), padx=10, pady=10)
+        frm_action.pack(fill="x", pady=10)
+
+        tk.Label(frm_action, text="Selectează un produs din tabel și introdu cantitatea de adăugat:", bg="white").pack(side="left")
+        
+        self.ent_add_stoc = tk.Entry(frm_action, width=10, font=("Segoe UI", 10))
+        self.ent_add_stoc.pack(side="left", padx=10)
+        
+        ttk.Button(frm_action, text="➕ Adaugă Stoc (Intrare Marfă)", style="Accent.TButton", command=self.add_stock).pack(side="left")
+
+    def refresh_stocuri(self):
+        # Golim tabelul
+        for i in self.tree_stoc.get_children(): self.tree_stoc.delete(i)
+        
+        conn = self.get_conn()
+        if not conn: return
+        cur = conn.cursor()
+
+        # Populam Dropdown Depozite (daca e gol)
+        if not self.combo_depozit['values']:
+            try:
+                cur.execute("SELECT nume FROM DEPOZIT")
+                depos = ["Toate"] + [r[0] for r in cur]
+                self.combo_depozit['values'] = depos
+                self.combo_depozit.current(0)
+            except: pass
+
+        # Construim Query-ul dinamic
+        sql = """
+            SELECT p.denumire, p.cod_sku, d.nume, s.cantitate, s.pret_minim, (s.cantitate * s.pret_minim) as valoare, 
+                   p.produs_id, d.depozit_id
+            FROM STOC s
+            JOIN PRODUS p ON s.produs_id = p.produs_id
+            JOIN DEPOZIT d ON s.depozit_id = d.depozit_id
+        """
+        
+        filtre = self.combo_depozit.get()
+        if filtre and filtre != "Toate":
+            sql += f" WHERE d.nume = '{filtre}'"
+        
+        sql += " ORDER BY s.cantitate ASC" # Vedem întâi produsele cu stoc mic
+
+        total_general = 0
+        try:
+            cur.execute(sql)
+            for row in cur:
+                # row[0-5] sunt datele vizibile, row[6-7] sunt ID-urile ascunse (pentru update)
+                # Formatam preturile
+                pret = f"{row[4]:.2f}"
+                val = f"{row[5]:.2f}"
+                total_general += row[5]
+                
+                # Inseram in Treeview, dar salvam ID-urile in tag-ul 'values' extins sau intr-un dictionar
+                # Truc: Punem ID-urile la final in values, dar nu le definim in columns, deci nu se vad, dar se pot accesa
+                item_id = self.tree_stoc.insert("", "end", values=(row[0], row[1], row[2], row[3], pret, val))
+                # Salvam ID-urile reale in dictionarul item-ului pentru a le folosi la update
+                self.tree_stoc.set(item_id, column="#0", value=f"{row[6]}|{row[7]}") # Hack: stocam in coloana #0 ascunsa
+                
+                # Coloram randurile cu stoc critic (<10)
+                if row[3] < 10:
+                    self.tree_stoc.item(item_id, tags=('critic',))
+
+            self.tree_stoc.tag_configure('critic', foreground='red')
+            self.lbl_total_val.config(text=f"Valoare Totală Stoc: {total_general:,.2f} RON")
+
+        except Exception as e: print(e)
+        finally: conn.close()
+
+    def add_stock(self):
+        sel = self.tree_stoc.selection()
+        if not sel:
+            messagebox.showwarning("Atenție", "Selectează un produs din tabel pentru aprovizionare!")
+            return
+        
+        qty_str = self.ent_add_stoc.get()
+        if not qty_str.isdigit():
+            messagebox.showerror("Eroare", "Introdu o cantitate validă (număr întreg)!")
+            return
+        
+        # Recuperam ID-urile salvate. 
+        # Nota: In Treeview standard e greu sa ascunzi coloane si sa iei date din ele.
+        # Vom face un query rapid bazat pe numele selectat sau folosim metoda mai sigura:
+        # Preluam valorile vizibile
+        values = self.tree_stoc.item(sel[0])['values']
+        prod_nume = values[0]
+        depozit_nume = values[2]
+        
+        try:
+            conn = self.get_conn()
+            cur = conn.cursor()
+            
+            # 1. Aflam ID-urile reale (SQL rapid)
+            cur.execute("SELECT produs_id FROM PRODUS WHERE denumire = :1", [prod_nume])
+            pid = cur.fetchone()[0]
+            cur.execute("SELECT depozit_id FROM DEPOZIT WHERE nume = :1", [depozit_nume])
+            did = cur.fetchone()[0]
+            
+            # 2. Apeleaza Procedura
+            cur.callproc("ADMIN_UPDATE_STOC", [pid, did, int(qty_str)])
+            conn.close()
+            
+            messagebox.showinfo("Succes", f"Stoc actualizat pentru {prod_nume}!\n(+{qty_str} buc)")
+            self.ent_add_stoc.delete(0, tk.END)
+            self.refresh_stocuri()
+            
+        except Exception as e:
+            messagebox.showerror("Eroare DB", str(e))
+
+
+    # ================= UI TAB CLIENTI (CEL VECHI) =================
     def build_clienti_ui(self):
-        # Formular Adaugare (Grid Layout curat)
+        # Formular Adaugare
         frm_add = tk.LabelFrame(self.tab_clienti, text="Adăugare Client Nou", font=("Segoe UI", 10, "bold"), bg="white", padx=10, pady=10)
         frm_add.pack(fill="x", pady=(0, 20))
         
@@ -126,7 +279,7 @@ class AdminPage(tk.Frame):
 
         # Tabel
         cols = ("ID", "NUME", "COD FISCAL", "TIP", "CATEGORIE PRET")
-        self.tree = ttk.Treeview(self.tab_clienti, columns=cols, show="headings", height=15)
+        self.tree = ttk.Treeview(self.tab_clienti, columns=cols, show="headings", height=12)
         for c in cols: self.tree.heading(c, text=c)
         self.tree.column("ID", width=50, anchor="center")
         self.tree.pack(fill="both", expand=True, side="left")
@@ -135,13 +288,10 @@ class AdminPage(tk.Frame):
         sb.pack(side="right", fill="y")
         self.tree.configure(yscroll=sb.set)
         
-        # Buton Stergere (Floating bottom right)
+        # Buton Stergere
         ttk.Button(self.tab_clienti, text="Șterge Selectat", style="Danger.TButton", command=self.delete_client).pack(pady=10, anchor="e")
 
-    def get_conn(self):
-        return oracledb.connect(user=DB_USER, password=DB_PASS, dsn=DB_DSN)
-
-    def refresh_data(self):
+    def refresh_clienti(self):
         for i in self.tree.get_children(): self.tree.delete(i)
         try:
             conn = self.get_conn()
@@ -151,6 +301,7 @@ class AdminPage(tk.Frame):
             conn.close()
         except: pass
 
+    # ... (Păstrează metodele add_client și delete_client exact ca înainte)
     def add_client(self):
         try:
             conn = self.get_conn()
@@ -158,7 +309,7 @@ class AdminPage(tk.Frame):
             cur.callproc("ADMIN_ADAUGA_CLIENT", [self.combo_tip.get(), self.ent_nume.get(), self.ent_fiscal.get(), "Romania", "Standard"])
             conn.close()
             messagebox.showinfo("Succes", "Client adăugat!")
-            self.refresh_data()
+            self.refresh_clienti()
         except Exception as e: messagebox.showerror("Eroare", str(e))
 
     def delete_client(self):
@@ -171,9 +322,16 @@ class AdminPage(tk.Frame):
                 cur = conn.cursor()
                 cur.callproc("ADMIN_STERGE_CLIENT", [client_id])
                 conn.close()
-                self.refresh_data()
+                self.refresh_clienti()
             except Exception as e: messagebox.showerror("Eroare", "Nu se poate șterge (are comenzi active)!")
 
+    def get_conn(self):
+        return oracledb.connect(user=DB_USER, password=DB_PASS, dsn=DB_DSN)
+    
+    def refresh_data(self):
+        # Default refresh la deschidere
+        self.refresh_clienti()
+        
 # ================= AGENT PAGE (LIVE TOTAL & UI UPDATE) =================
 class AgentPage(tk.Frame):
     def __init__(self, parent, controller):
