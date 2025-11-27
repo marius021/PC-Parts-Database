@@ -7,21 +7,43 @@ DB_USER = "AGENT_VANZARI"
 DB_PASS = "parolaagent123"
 DB_DSN = "localhost:1521/freepdb1"
 
-# ================= CLASA PRINCIPALĂ (CONTROLLER) =================
+# ================= CULORI SI STILURI =================
+COLOR_PRIMARY = "#2c3e50"    # Dark Blue (Sidebar)
+COLOR_ACCENT = "#3498db"     # Light Blue (Buttons/Highlights)
+COLOR_SUCCESS = "#27ae60"    # Green (Save)
+COLOR_DANGER = "#e74c3c"     # Red (Logout/Delete)
+COLOR_BG = "#ecf0f1"         # Light Gray (Background)
+FONT_HEADER = ("Segoe UI", 16, "bold")
+FONT_LABEL = ("Segoe UI", 11)
+FONT_TOTAL = ("Segoe UI", 24, "bold")
+
 class MainApp(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("PC Parts Management System")
-        self.geometry("800x650")
+        self.title("PC Parts Manager v2.0")
+        self.geometry("900x700")
+        self.configure(bg=COLOR_BG)
         
-        # Container pentru frame-uri
-        self.container = tk.Frame(self)
-        self.container.pack(side="top", fill="both", expand=True)
+        # Configurare Stiluri Globale (TTK)
+        style = ttk.Style()
+        style.theme_use('clam')
         
-        # Dicționar pentru a stoca ferestrele
+        # Stiluri Butoane
+        style.configure("Accent.TButton", background=COLOR_ACCENT, foreground="white", font=("Segoe UI", 10, "bold"), padding=10)
+        style.map("Accent.TButton", background=[("active", "#2980b9")])
+        
+        style.configure("Danger.TButton", background=COLOR_DANGER, foreground="white", font=("Segoe UI", 10, "bold"), padding=10)
+        style.map("Danger.TButton", background=[("active", "#c0392b")])
+
+        # Stiluri Tab-uri
+        style.configure("TNotebook", background=COLOR_BG)
+        style.configure("TNotebook.Tab", padding=[15, 5], font=("Segoe UI", 11))
+
+        # Container Principal
+        self.container = tk.Frame(self, bg=COLOR_BG)
+        self.container.pack(fill="both", expand=True)
+        
         self.frames = {}
-        
-        # Initializam ferestrele
         for F in (LoginPage, AdminPage, AgentPage):
             page_name = F.__name__
             frame = F(parent=self.container, controller=self)
@@ -31,244 +53,273 @@ class MainApp(tk.Tk):
         self.show_frame("LoginPage")
 
     def show_frame(self, page_name):
-        '''Functie pentru a schimba ferestrele'''
         frame = self.frames[page_name]
         frame.tkraise()
-        # Daca intram in Admin sau Agent, vrem sa facem refresh la date
         if hasattr(frame, 'refresh_data'):
             frame.refresh_data()
 
-# ================= PAGINA DE LOGIN =================
+# ================= LOGIN PAGE (DESIGN MODERN) =================
 class LoginPage(tk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent)
-        self.controller = controller
-        self.configure(bg="#2c3e50")
+        self.configure(bg=COLOR_PRIMARY)
         
-        lbl_title = tk.Label(self, text="PC PARTS MANAGER", font=("Arial", 24, "bold"), fg="white", bg="#2c3e50")
-        lbl_title.pack(pady=80)
+        # Centrare continut
+        card = tk.Frame(self, bg="white", padx=40, pady=40, relief="raised")
+        card.place(relx=0.5, rely=0.5, anchor="center")
         
-        # Buton Agent
-        btn_agent = tk.Button(self, text="👤 Login Agent Vânzări", font=("Arial", 14), width=25, height=2,
-                              command=lambda: controller.show_frame("AgentPage"))
-        btn_agent.pack(pady=20)
+        tk.Label(card, text="PC PARTS ERP", font=("Segoe UI", 28, "bold"), fg=COLOR_PRIMARY, bg="white").pack(pady=(0, 10))
+        tk.Label(card, text="Sistem de Gestiune Integrat", font=("Segoe UI", 12), fg="gray", bg="white").pack(pady=(0, 30))
         
-        # Buton Admin
-        btn_admin = tk.Button(self, text="🛠️ Login Administrator", font=("Arial", 14), width=25, height=2,
-                              bg="#e74c3c", fg="white",
-                              command=lambda: controller.show_frame("AdminPage"))
-        btn_admin.pack(pady=20)
+        ttk.Button(card, text="🔐 Autentificare ADMINISTRATOR", style="Danger.TButton", width=30,
+                   command=lambda: controller.show_frame("AdminPage")).pack(pady=10)
+        
+        ttk.Button(card, text="💼 Autentificare AGENT VÂNZĂRI", style="Accent.TButton", width=30,
+                   command=lambda: controller.show_frame("AgentPage")).pack(pady=10)
 
-# ================= PAGINA ADMIN =================
+# ================= ADMIN PAGE =================
 class AdminPage(tk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent)
+        self.configure(bg=COLOR_BG)
         self.controller = controller
         
-        # Header
-        header = tk.Frame(self, bg="#e74c3c", height=50)
-        header.pack(fill="x")
-        tk.Label(header, text="PANOU ADMINISTRATOR", bg="#e74c3c", fg="white", font=("Arial", 12, "bold")).pack(side="left", padx=10)
-        tk.Button(header, text="Log Out", command=lambda: controller.show_frame("LoginPage")).pack(side="right", padx=10, pady=10)
+        # Navbar
+        nav = tk.Frame(self, bg=COLOR_DANGER, height=60)
+        nav.pack(fill="x")
+        tk.Label(nav, text="PANOU ADMIN", bg=COLOR_DANGER, fg="white", font=FONT_HEADER).pack(side="left", padx=20, pady=15)
+        tk.Button(nav, text="Deconectare", bg="white", fg=COLOR_DANGER, font=("Segoe UI", 9, "bold"), relief="flat",
+                  command=lambda: controller.show_frame("LoginPage")).pack(side="right", padx=20)
 
-        # Tabs
-        notebook = ttk.Notebook(self)
-        notebook.pack(fill="both", expand=True, padx=10, pady=10)
+        # Content
+        content = tk.Frame(self, bg=COLOR_BG, padx=20, pady=20)
+        content.pack(fill="both", expand=True)
+
+        # Notebook
+        nb = ttk.Notebook(content)
+        nb.pack(fill="both", expand=True)
         
-        # Tab Clienti
-        self.tab_clienti = tk.Frame(notebook)
-        notebook.add(self.tab_clienti, text="Gestionare Clienți")
+        self.tab_clienti = tk.Frame(nb, bg="white", padx=20, pady=20)
+        nb.add(self.tab_clienti, text=" Gestionare Clienți ")
+        
         self.build_clienti_ui()
 
     def build_clienti_ui(self):
-        # Zona Adaugare
-        frame_add = tk.LabelFrame(self.tab_clienti, text="Adaugă Client Nou")
-        frame_add.pack(fill="x", padx=10, pady=5)
+        # Formular Adaugare (Grid Layout curat)
+        frm_add = tk.LabelFrame(self.tab_clienti, text="Adăugare Client Nou", font=("Segoe UI", 10, "bold"), bg="white", padx=10, pady=10)
+        frm_add.pack(fill="x", pady=(0, 20))
         
-        tk.Label(frame_add, text="Nume:").grid(row=0, column=0, padx=5, pady=5)
-        self.ent_nume = tk.Entry(frame_add, width=30)
-        self.ent_nume.grid(row=0, column=1)
+        tk.Label(frm_add, text="Nume:", bg="white").grid(row=0, column=0, padx=5, sticky="e")
+        self.ent_nume = ttk.Entry(frm_add, width=25)
+        self.ent_nume.grid(row=0, column=1, padx=5)
         
-        tk.Label(frame_add, text="Cod Fiscal:").grid(row=0, column=2, padx=5)
-        self.ent_fiscal = tk.Entry(frame_add)
-        self.ent_fiscal.grid(row=0, column=3)
+        tk.Label(frm_add, text="Cod Fiscal:", bg="white").grid(row=0, column=2, padx=5, sticky="e")
+        self.ent_fiscal = ttk.Entry(frm_add, width=20)
+        self.ent_fiscal.grid(row=0, column=3, padx=5)
         
-        tk.Label(frame_add, text="Tip:").grid(row=1, column=0, padx=5)
-        self.combo_tip = ttk.Combobox(frame_add, values=["B2C", "B2B"], width=10)
-        self.combo_tip.grid(row=1, column=1, sticky="w")
+        tk.Label(frm_add, text="Tip:", bg="white").grid(row=0, column=4, padx=5, sticky="e")
+        self.combo_tip = ttk.Combobox(frm_add, values=["B2C", "B2B"], width=5, state="readonly")
         self.combo_tip.current(0)
+        self.combo_tip.grid(row=0, column=5, padx=5)
 
-        tk.Label(frame_add, text="Țara:").grid(row=1, column=2, padx=5)
-        self.ent_tara = tk.Entry(frame_add)
-        self.ent_tara.insert(0, "Romania")
-        self.ent_tara.grid(row=1, column=3)
+        ttk.Button(frm_add, text="+ Adaugă Client", style="Accent.TButton", command=self.add_client).grid(row=0, column=6, padx=20)
 
-        tk.Button(frame_add, text="Salvează Client", bg="green", fg="white", command=self.add_client).grid(row=1, column=4, padx=20)
-
-        # Zona Lista & Stergere
-        frame_list = tk.LabelFrame(self.tab_clienti, text="Listă Clienți (Selectează pentru ștergere)")
-        frame_list.pack(fill="both", expand=True, padx=10, pady=5)
+        # Tabel
+        cols = ("ID", "NUME", "COD FISCAL", "TIP", "CATEGORIE PRET")
+        self.tree = ttk.Treeview(self.tab_clienti, columns=cols, show="headings", height=15)
+        for c in cols: self.tree.heading(c, text=c)
+        self.tree.column("ID", width=50, anchor="center")
+        self.tree.pack(fill="both", expand=True, side="left")
         
-        cols = ("id", "nume", "fiscal", "tip")
-        self.tree = ttk.Treeview(frame_list, columns=cols, show="headings")
-        for col in cols: self.tree.heading(col, text=col.upper())
-        self.tree.pack(side="left", fill="both", expand=True)
+        sb = ttk.Scrollbar(self.tab_clienti, orient="vertical", command=self.tree.yview)
+        sb.pack(side="right", fill="y")
+        self.tree.configure(yscroll=sb.set)
         
-        btn_del = tk.Button(frame_list, text="🗑️ Șterge Client Selectat", bg="red", fg="white", command=self.delete_client)
-        btn_del.pack(side="right", fill="y", padx=5)
+        # Buton Stergere (Floating bottom right)
+        ttk.Button(self.tab_clienti, text="Șterge Selectat", style="Danger.TButton", command=self.delete_client).pack(pady=10, anchor="e")
 
     def get_conn(self):
         return oracledb.connect(user=DB_USER, password=DB_PASS, dsn=DB_DSN)
 
     def refresh_data(self):
-        # Reincarcam lista de clienti
         for i in self.tree.get_children(): self.tree.delete(i)
         try:
             conn = self.get_conn()
             cur = conn.cursor()
-            cur.execute("SELECT client_id, nume, cod_fiscal, tip FROM CLIENT ORDER BY client_id DESC")
-            for row in cur:
-                self.tree.insert("", "end", values=row)
+            cur.execute("SELECT client_id, nume, cod_fiscal, tip, categoria_pret FROM CLIENT ORDER BY client_id DESC")
+            for row in cur: self.tree.insert("", "end", values=row)
             conn.close()
-        except Exception as e:
-            print(e)
+        except: pass
 
     def add_client(self):
         try:
             conn = self.get_conn()
             cur = conn.cursor()
-            cur.callproc("ADMIN_ADAUGA_CLIENT", [
-                self.combo_tip.get(),
-                self.ent_nume.get(),
-                self.ent_fiscal.get(),
-                self.ent_tara.get(),
-                "Standard" # Default
-            ])
+            cur.callproc("ADMIN_ADAUGA_CLIENT", [self.combo_tip.get(), self.ent_nume.get(), self.ent_fiscal.get(), "Romania", "Standard"])
             conn.close()
             messagebox.showinfo("Succes", "Client adăugat!")
             self.refresh_data()
-            self.ent_nume.delete(0, tk.END)
-            self.ent_fiscal.delete(0, tk.END)
-        except oracledb.DatabaseError as e:
-            messagebox.showerror("Eroare", e.args[0].message)
+        except Exception as e: messagebox.showerror("Eroare", str(e))
 
     def delete_client(self):
-        selected = self.tree.selection()
-        if not selected:
-            messagebox.showwarning("Atenție", "Selectează un client din listă!")
-            return
-        
-        client_id = self.tree.item(selected[0])['values'][0]
-        
-        if messagebox.askyesno("Confirmare", "Sigur vrei să ștergi clientul?"):
+        sel = self.tree.selection()
+        if not sel: return
+        client_id = self.tree.item(sel[0])['values'][0]
+        if messagebox.askyesno("Confirmare", "Ștergi clientul?"):
             try:
                 conn = self.get_conn()
                 cur = conn.cursor()
                 cur.callproc("ADMIN_STERGE_CLIENT", [client_id])
                 conn.close()
-                messagebox.showinfo("Succes", "Client șters!")
                 self.refresh_data()
-            except oracledb.DatabaseError as e:
-                # Aici prindem eroarea personalizata din PL/SQL (Client cu comenzi)
-                messagebox.showerror("Eroare Ștergere", e.args[0].message)
+            except Exception as e: messagebox.showerror("Eroare", "Nu se poate șterge (are comenzi active)!")
 
-
-# ================= PAGINA AGENT (Codul Anterior Adaptat) =================
+# ================= AGENT PAGE (LIVE TOTAL & UI UPDATE) =================
 class AgentPage(tk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent)
+        self.configure(bg=COLOR_BG)
         self.controller = controller
-        
-        # Header
-        header = tk.Frame(self, bg="#2980b9", height=50)
-        header.pack(fill="x")
-        tk.Label(header, text="PANOU AGENT VÂNZĂRI", bg="#2980b9", fg="white", font=("Arial", 12, "bold")).pack(side="left", padx=10)
-        tk.Button(header, text="Log Out", command=lambda: controller.show_frame("LoginPage")).pack(side="right", padx=10, pady=10)
-
-        # Tab-urile vechi
-        notebook = ttk.Notebook(self)
-        notebook.pack(fill="both", expand=True, padx=10, pady=10)
-        
-        self.tab_vanzare = tk.Frame(notebook)
-        self.tab_istoric = tk.Frame(notebook)
-        notebook.add(self.tab_vanzare, text="🛒 Vânzare Nouă")
-        notebook.add(self.tab_istoric, text="📜 Istoric Comenzi")
-
-        # Initializare logica veche (simplificata pentru exemplu)
-        self.init_vanzare_ui()
-        self.init_istoric_ui()
-        
         self.client_map = {}
-        self.produs_map = {}
+        self.produs_info = {} # { 'Nume': {'id': 1, 'pret': 100, 'stoc': 10} }
+
+        # Navbar
+        nav = tk.Frame(self, bg=COLOR_ACCENT, height=60)
+        nav.pack(fill="x")
+        tk.Label(nav, text="MODUL VÂNZĂRI", bg=COLOR_ACCENT, fg="white", font=FONT_HEADER).pack(side="left", padx=20, pady=15)
+        tk.Button(nav, text="Deconectare", bg="white", fg=COLOR_ACCENT, font=("Segoe UI", 9, "bold"), relief="flat",
+                  command=lambda: controller.show_frame("LoginPage")).pack(side="right", padx=20)
+
+        # Layout Principal: Split 60% Stanga (Formular), 40% Dreapta (Sumar)
+        main = tk.Frame(self, bg=COLOR_BG, padx=20, pady=20)
+        main.pack(fill="both", expand=True)
+
+        left_frame = tk.Frame(main, bg="white", padx=20, pady=20, relief="flat")
+        left_frame.pack(side="left", fill="both", expand=True, padx=(0, 10))
+
+        right_frame = tk.Frame(main, bg="white", padx=20, pady=20, relief="flat")
+        right_frame.pack(side="right", fill="both", expand=True, padx=(10, 0))
+
+        # === STANGA: INPUT ===
+        tk.Label(left_frame, text="Detalii Comandă", font=("Segoe UI", 14, "bold"), bg="white", fg=COLOR_PRIMARY).pack(anchor="w", pady=(0, 20))
+
+        # Client
+        tk.Label(left_frame, text="Client:", bg="white", font=FONT_LABEL).pack(anchor="w")
+        self.cb_client = ttk.Combobox(left_frame, state="readonly", font=FONT_LABEL)
+        self.cb_client.pack(fill="x", pady=(0, 15))
+
+        # Produs
+        tk.Label(left_frame, text="Produs:", bg="white", font=FONT_LABEL).pack(anchor="w")
+        self.cb_produs = ttk.Combobox(left_frame, state="readonly", font=FONT_LABEL)
+        self.cb_produs.pack(fill="x", pady=(0, 5))
+        self.cb_produs.bind("<<ComboboxSelected>>", self.on_prod_select)
+        
+        # Info Stoc (Mic sub produs)
+        self.lbl_stoc_info = tk.Label(left_frame, text="Stoc disponibil: -", bg="white", fg="gray", font=("Segoe UI", 9))
+        self.lbl_stoc_info.pack(anchor="w", pady=(0, 15))
+
+        # Grid pentru Cantitate / Discount / Livrare
+        grid_fr = tk.Frame(left_frame, bg="white")
+        grid_fr.pack(fill="x", pady=10)
+
+        tk.Label(grid_fr, text="Cantitate:", bg="white").grid(row=0, column=0, sticky="w")
+        self.ent_cant = tk.Spinbox(grid_fr, from_=1, to=1000, width=10, font=FONT_LABEL, command=self.update_total)
+        self.ent_cant.grid(row=1, column=0, padx=(0, 10), pady=(0, 15))
+        self.ent_cant.bind("<KeyRelease>", self.update_total)
+
+        tk.Label(grid_fr, text="Discount (%):", bg="white").grid(row=0, column=1, sticky="w")
+        self.ent_disc = tk.Entry(grid_fr, width=10, font=FONT_LABEL)
+        self.ent_disc.insert(0, "0")
+        self.ent_disc.grid(row=1, column=1, padx=(0, 10), pady=(0, 15))
+        self.ent_disc.bind("<KeyRelease>", self.update_total)
+
+        tk.Label(left_frame, text="Metodă Livrare:", bg="white", font=FONT_LABEL).pack(anchor="w")
+        self.cb_livrare = ttk.Combobox(left_frame, values=["Curier Rapid", "Ridicare Personala"], state="readonly", font=FONT_LABEL)
+        self.cb_livrare.current(0)
+        self.cb_livrare.pack(fill="x", pady=(0, 20))
+
+        # === DREAPTA: SUMAR LIVE ===
+        tk.Label(right_frame, text="Sumar Tranzacție", font=("Segoe UI", 14, "bold"), bg="white", fg=COLOR_PRIMARY).pack(anchor="w", pady=(0, 20))
+
+        # Card Pret
+        tk.Label(right_frame, text="Preț Unitar:", bg="white", fg="gray").pack(anchor="e")
+        self.lbl_unit_price = tk.Label(right_frame, text="0.00 RON", bg="white", font=("Segoe UI", 12))
+        self.lbl_unit_price.pack(anchor="e", pady=(0, 10))
+
+        tk.Frame(right_frame, height=2, bg=COLOR_BG).pack(fill="x", pady=10) # Separator
+
+        # Total Mare
+        tk.Label(right_frame, text="TOTAL DE PLATĂ:", bg="white", font=("Segoe UI", 12, "bold")).pack(anchor="center")
+        self.lbl_total = tk.Label(right_frame, text="0.00 RON", bg="white", fg=COLOR_SUCCESS, font=FONT_TOTAL)
+        self.lbl_total.pack(anchor="center", pady=10)
+
+        # Buton Salvare Mare
+        ttk.Button(right_frame, text="✅ PLASEAZĂ COMANDA", style="Accent.TButton", command=self.save_order).pack(fill="x", side="bottom", pady=20)
 
     def get_conn(self):
         return oracledb.connect(user=DB_USER, password=DB_PASS, dsn=DB_DSN)
 
     def refresh_data(self):
-        # Functie apelata cand intram pe pagina
-        self.populeaza_dropdowns()
-        self.refresh_istoric()
-
-    def init_vanzare_ui(self):
-        fr = tk.Frame(self.tab_vanzare, padx=20, pady=20)
-        fr.pack(fill="both")
-        
-        tk.Label(fr, text="Client:").grid(row=0, column=0)
-        self.cb_client = ttk.Combobox(fr, width=30)
-        self.cb_client.grid(row=0, column=1)
-        
-        tk.Label(fr, text="Produs:").grid(row=1, column=0)
-        self.cb_produs = ttk.Combobox(fr, width=30)
-        self.cb_produs.grid(row=1, column=1)
-        
-        tk.Label(fr, text="Cantitate:").grid(row=2, column=0)
-        self.ent_cant = tk.Entry(fr)
-        self.ent_cant.grid(row=2, column=1)
-        
-        tk.Button(fr, text="Vinde", bg="green", fg="white", command=self.vinde).grid(row=3, column=1, pady=10)
-
-    def init_istoric_ui(self):
-        self.tree = ttk.Treeview(self.tab_istoric, columns=("id", "client", "total"), show="headings")
-        self.tree.heading("id", text="ID"); self.tree.heading("client", text="Client"); self.tree.heading("total", text="Total")
-        self.tree.pack(fill="both", expand=True)
-
-    def populeaza_dropdowns(self):
         try:
             conn = self.get_conn()
             cur = conn.cursor()
+            
+            # Clienti
             cur.execute("SELECT client_id, nume FROM CLIENT")
             self.client_map = {row[1]: row[0] for row in cur}
             self.cb_client['values'] = list(self.client_map.keys())
             
-            cur.execute("SELECT produs_id, denumire FROM PRODUS")
-            self.produs_map = {row[1]: row[0] for row in cur}
-            self.cb_produs['values'] = list(self.produs_map.keys())
+            # Produse
+            sql = "SELECT p.produs_id, p.denumire, s.pret_minim, s.cantitate FROM PRODUS p JOIN STOC s ON p.produs_id = s.produs_id WHERE s.depozit_id = 1"
+            cur.execute(sql)
+            self.produs_info = {row[1]: {'id': row[0], 'pret': row[2], 'stoc': row[3]} for row in cur}
+            self.cb_produs['values'] = list(self.produs_info.keys())
             conn.close()
         except: pass
 
-    def refresh_istoric(self):
-        for i in self.tree.get_children(): self.tree.delete(i)
-        try:
-            conn = self.get_conn()
-            cur = conn.cursor()
-            cur.execute("SELECT cv_id, nume_client, valoare_totala FROM V_ISTORIC_SUMAR")
-            for row in cur: self.tree.insert("", "end", values=row)
-            conn.close()
-        except: pass
+    def on_prod_select(self, event):
+        name = self.cb_produs.get()
+        if name in self.produs_info:
+            info = self.produs_info[name]
+            self.lbl_stoc_info.config(text=f"Stoc disponibil: {info['stoc']} buc", fg="green" if info['stoc'] > 0 else "red")
+            self.lbl_unit_price.config(text=f"{info['pret']:.2f} RON")
+            self.update_total()
 
-    def vinde(self):
-        # Logica simplificata de apelare procedura existenta
+    def update_total(self, event=None):
         try:
-            cid = self.client_map[self.cb_client.get()]
-            pid = self.produs_map[self.cb_produs.get()]
-            cant = int(self.ent_cant.get())
+            name = self.cb_produs.get()
+            if name not in self.produs_info: return
             
+            price = self.produs_info[name]['pret']
+            qty = int(self.ent_cant.get())
+            disc = float(self.ent_disc.get()) if self.ent_disc.get() else 0
+            
+            total = (price * qty) * (1 - disc/100)
+            self.lbl_total.config(text=f"{total:.2f} RON")
+        except:
+            self.lbl_total.config(text="0.00 RON")
+
+    def save_order(self):
+        try:
+            # Validari
+            c_name, p_name = self.cb_client.get(), self.cb_produs.get()
+            if not c_name or not p_name: return messagebox.showwarning("Atentie", "Completeaza tot!")
+            
+            cid = self.client_map[c_name]
+            pid = self.produs_info[p_name]['id']
+            qty = int(self.ent_cant.get())
+            liv = self.cb_livrare.get()
+            disc = float(self.ent_disc.get())
+
             conn = self.get_conn()
             cur = conn.cursor()
-            cur.callproc("ADAUGA_COMANDA_COMPLETA", [cid, pid, cant, "Ridicare", 0])
+            cur.callproc("ADAUGA_COMANDA_COMPLETA", [cid, pid, qty, liv, disc])
             conn.close()
-            messagebox.showinfo("Succes", "Vandut!")
-            self.refresh_data()
+            
+            messagebox.showinfo("Succes", f"Comanda plasata!\nTotal: {self.lbl_total.cget('text')}")
+            self.refresh_data() # Refresh stoc
+            self.ent_cant.delete(0, tk.END); self.ent_cant.insert(0, "1")
+            
         except Exception as e:
             messagebox.showerror("Eroare", str(e))
 
