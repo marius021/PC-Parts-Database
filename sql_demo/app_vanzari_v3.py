@@ -113,17 +113,130 @@ class AdminPage(tk.Frame):
         self.notebook.add(self.tab_produse, text=" 📦 Catalog & Adăugare Produs ")
         self.build_produse_ui()
         
+        # Tab 3: COMENZI (NOU)
+        self.tab_comenzi = tk.Frame(self.notebook, bg="white", padx=20, pady=20)
+        self.notebook.add(self.tab_comenzi, text=" 🚚 Gestionare Comenzi & Status ")
+        self.build_comenzi_ui()
+        
         # Eveniment Tab Change
         self.notebook.bind("<<NotebookTabChanged>>", self.on_tab_change)
 
     def on_tab_change(self, event):
         selected_tab = self.notebook.index(self.notebook.select())
-        if selected_tab == 0:
-            self.refresh_clienti()
-        elif selected_tab == 1:
-            self.refresh_produse_data()
+        if selected_tab == 0: self.refresh_clienti()
+        elif selected_tab == 1: self.refresh_produse_data()
+        elif selected_tab == 2: self.refresh_comenzi() # Refresh la tab-ul nou
+        
+    # ================= UI COMENZI ================
+    
+    def build_comenzi_ui(self):
+        # 1. Filtre
+        frm_filter = tk.Frame(self.tab_comenzi, bg="white")
+        frm_filter.pack(fill="x", pady=(0, 10))
+        
+        tk.Label(frm_filter, text="Filtrează Status:", bg="white", font=("Segoe UI", 10, "bold")).pack(side="left")
+        self.cb_filter_status = ttk.Combobox(frm_filter, values=["Toate", "In Asteptare", "In Procesare", "Finalizata"], state="readonly")
+        self.cb_filter_status.current(0)
+        self.cb_filter_status.pack(side="left", padx=10)
+        self.cb_filter_status.bind("<<ComboboxSelected>>", lambda e: self.refresh_comenzi())
 
-    # ================= UI PRODUSE (NOU) =================
+        ttk.Button(frm_filter, text="🔄 Refresh", command=self.refresh_comenzi).pack(side="right")
+
+        # 2. Tabel Comenzi
+        cols = ("ID", "CLIENT", "DATA", "LIVRARE", "TOTAL", "STATUS")
+        self.tree_cmd = ttk.Treeview(self.tab_comenzi, columns=cols, show="headings", height=15)
+        
+        for c in cols: self.tree_cmd.heading(c, text=c)
+        self.tree_cmd.column("ID", width=60, anchor="center")
+        self.tree_cmd.column("TOTAL", width=100, anchor="e")
+        self.tree_cmd.column("STATUS", width=120, anchor="center")
+
+        # Scrollbar
+        sb = ttk.Scrollbar(self.tab_comenzi, orient="vertical", command=self.tree_cmd.yview)
+        self.tree_cmd.configure(yscroll=sb.set)
+        
+        self.tree_cmd.pack(side="left", fill="both", expand=True)
+        sb.pack(side="right", fill="y")
+
+        # Configurare Tag-uri pentru Culori
+        self.tree_cmd.tag_configure('noua', foreground='#e67e22') # Portocaliu
+        self.tree_cmd.tag_configure('finalizata', foreground='green', font=("Segoe UI", 9, "bold")) 
+        self.tree_cmd.tag_configure('procesare', foreground='#2980b9') # Albastru
+
+        # 3. Zona Actiuni (Jos)
+        frm_actions = tk.LabelFrame(self.tab_comenzi, text="Modificare Status Comandă Selectată", font=("Segoe UI", 10, "bold"), bg="white", padx=10, pady=10)
+        frm_actions.pack(fill="x", pady=10)
+
+        ttk.Button(frm_actions, text="⚙️ Marchează: ÎN PROCESARE", command=lambda: self.change_status("In Procesare")).pack(side="left", padx=5)
+        ttk.Button(frm_actions, text="✅ Confirmă: FINALIZATĂ", style="Accent.TButton", command=lambda: self.change_status("Finalizata")).pack(side="left", padx=5)
+        ttk.Button(frm_actions, text="❌ ANULEAZĂ COMANDA", style="Danger.TButton", command=lambda: self.change_status("Anulata")).pack(side="right", padx=5)
+
+    def refresh_comenzi(self):
+        # Curatare tabel
+        for i in self.tree_cmd.get_children(): self.tree_cmd.delete(i)
+        
+        filtre = self.cb_filter_status.get()
+        
+        try:
+            conn = self.get_conn()
+            cur = conn.cursor()
+            
+            sql = "SELECT cv_id, nume_client, data_creare, metoda_livrare, valoare_totala, status FROM V_ISTORIC_SUMAR"
+            
+            # Filtrare simpla in Python (sau putem face in SQL WHERE)
+            # Pentru simplitate, luam tot si filtram aici
+            
+            cur.execute(sql)
+            for row in cur:
+                status_db = row[5]
+                
+                # Aplicare Filtru UI
+                if filtre != "Toate" and filtre != status_db:
+                    continue
+
+                # Formatare
+                data_fmt = row[2].strftime('%d-%m-%Y') if row[2] else ""
+                bani = f"{row[4]:.2f} RON" if row[4] else "0.00 RON"
+                
+                # Determinare Culoare (Tag)
+                tag = 'noua'
+                if status_db == 'Finalizata': tag = 'finalizata'
+                elif status_db == 'In Procesare': tag = 'procesare'
+                elif status_db == 'Anulata': tag = ''
+
+                self.tree_cmd.insert("", "end", values=(row[0], row[1], data_fmt, row[3], bani, status_db), tags=(tag,))
+            
+            conn.close()
+        except Exception as e: print(e)
+
+    def change_status(self, new_status):
+        sel = self.tree_cmd.selection()
+        if not sel:
+            messagebox.showwarning("Atenție", "Selectează o comandă din tabel!")
+            return
+        
+        item = self.tree_cmd.item(sel[0])
+        cv_id = item['values'][0]
+        current_status = item['values'][5]
+
+        # Validare logica (optional)
+        if current_status == "Finalizata" and new_status != "Anulata":
+             if not messagebox.askyesno("Confirmare", "Comanda este deja Finalizată. Sigur vrei să modifici?"):
+                 return
+
+        try:
+            conn = self.get_conn()
+            cur = conn.cursor()
+            cur.callproc("ADMIN_UPDATE_STATUS_COMANDA", [cv_id, new_status])
+            conn.close()
+            
+            messagebox.showinfo("Succes", f"Comanda {cv_id} este acum: {new_status}")
+            self.refresh_comenzi()
+            
+        except Exception as e:
+            messagebox.showerror("Eroare", str(e))
+
+    # ================= UI PRODUSE =================
     def build_produse_ui(self):
         # 1. Formular Adaugare (Stanga)
         frm_left = tk.LabelFrame(self.tab_produse, text="Definire Produs Nou", font=("Segoe UI", 10, "bold"), bg="white", padx=15, pady=15)
@@ -254,7 +367,7 @@ class AdminPage(tk.Frame):
         except Exception as e:
             messagebox.showerror("Eroare", str(e))
 
-    # ================= UI CLIENTI (La fel ca inainte) =================
+    # ================= UI CLIENTI =================
    
     def build_clienti_ui(self):
         # Formular Adaugare
