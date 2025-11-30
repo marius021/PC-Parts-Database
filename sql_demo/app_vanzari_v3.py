@@ -121,7 +121,82 @@ class AdminPage(tk.Frame):
         # Eveniment Tab Change
         self.notebook.bind("<<NotebookTabChanged>>", self.on_tab_change)
 
-    #
+    def open_restock_popup(self):
+        # 1. Validare selecție
+        sel = self.tree_prod.selection()
+        if not sel:
+            messagebox.showwarning("Atenție", "Selectează un produs din tabel pentru a face recepția mărfii!")
+            return
+        
+        item = self.tree_prod.item(sel[0])
+        prod_id = item['values'][0]
+        prod_nume = item['values'][1]
+
+        # 2. Configurare Popup
+        top = tk.Toplevel(self)
+        top.title(f"Recepție Marfă: {prod_nume}")
+        top.geometry("400x250")
+        top.configure(bg="white")
+
+        tk.Label(top, text="Intrare Stoc (Aprovizionare)", font=("Segoe UI", 14, "bold"), bg="white", fg="#2c3e50").pack(pady=15)
+
+        # Formular Mic
+        frm = tk.Frame(top, bg="white")
+        frm.pack(pady=10)
+
+        # Dropdown Depozit
+        tk.Label(frm, text="Alege Depozitul:", bg="white").grid(row=0, column=0, padx=5, pady=5, sticky="e")
+        cb_depozit = ttk.Combobox(frm, state="readonly", width=25)
+        cb_depozit.grid(row=0, column=1, padx=5, pady=5)
+
+        # Input Cantitate
+        tk.Label(frm, text="Cantitate (buc):", bg="white").grid(row=1, column=0, padx=5, pady=5, sticky="e")
+        ent_qty = ttk.Entry(frm, width=10)
+        ent_qty.grid(row=1, column=1, padx=5, pady=5, sticky="w")
+        ent_qty.focus()
+
+        # Populare Dropdown Depozite din DB
+        depozit_map = {} # Nume -> ID
+        try:
+            conn = self.get_conn()
+            cur = conn.cursor()
+            cur.execute("SELECT depozit_id, nume FROM DEPOZIT")
+            for r in cur:
+                depozit_map[r[1]] = r[0]
+            cb_depozit['values'] = list(depozit_map.keys())
+            if cb_depozit['values']: cb_depozit.current(0) # Selecteaza primul default
+            conn.close()
+        except Exception as e:
+            messagebox.showerror("Eroare DB", str(e))
+
+        # Funcția de Salvare internă
+        def confirm_restock():
+            dep_nume = cb_depozit.get()
+            qty_str = ent_qty.get()
+
+            if not dep_nume or not qty_str.isdigit():
+                messagebox.showerror("Eroare", "Selectează depozitul și introdu o cantitate validă!")
+                return
+            
+            dep_id = depozit_map[dep_nume]
+            qty = int(qty_str)
+
+            try:
+                conn = self.get_conn()
+                cur = conn.cursor()
+                # Apelăm procedura nouă SMART (Merge)
+                cur.callproc("ADMIN_APROVIZIONARE", [prod_id, dep_id, qty])
+                conn.close()
+                
+                messagebox.showinfo("Succes", f"Au intrat {qty} buc de '{prod_nume}'\nîn {dep_nume}!")
+                top.destroy() # Închide popup
+                
+            except Exception as e:
+                messagebox.showerror("Eroare", str(e))
+
+        # Buton Confirmare
+        ttk.Button(top, text="✅ Confirmă Recepția", style="Success.TButton", command=confirm_restock).pack(pady=10)
+        
     def view_stock_distribution(self):
         # 1. Verificăm ce produs e selectat
         sel = self.tree_prod.selection()
@@ -371,6 +446,14 @@ class AdminPage(tk.Frame):
         ttk.Button(btn_frame, text="📍 Vezi Distribuție Stoc pe Orașe", style="Accent.TButton", 
                    command=self.view_stock_distribution).pack(side="right")
 
+        # === BUTONUL NOU (Aprovizionare) ===
+        ttk.Button(btn_frame, text="➕ Adaugă Stoc (Intrare Marfă)", style="Success.TButton", 
+                   command=self.open_restock_popup).pack(side="right", padx=5)
+
+        # Definim un stil nou Verde pentru acest buton (pune asta în __init__ la MainApp sau aici local)
+        style = ttk.Style()
+        style.configure("Success.TButton", background="#27ae60", foreground="white", font=("Segoe UI", 9, "bold"))
+        style.map("Success.TButton", background=[("active", "#2ecc71")])
 
     def refresh_produse_data(self):
         # 1. Populam Dropdown-uri

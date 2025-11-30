@@ -330,3 +330,38 @@ ORDER BY cv.cv_id DESC;
 
 -- Refresh drepturi pe vedere
 GRANT SELECT ON pcparts.V_ISTORIC_SUMAR TO AGENT_VANZARI;
+
+
+-- === PROCEDURA "SMART" DE APROVIZIONARE
+CREATE OR REPLACE PROCEDURE pcparts.ADMIN_APROVIZIONARE (
+    p_produs_id IN NUMBER,
+    p_depozit_id IN NUMBER,
+    p_cantitate IN NUMBER
+) AS
+    v_pret_existent NUMBER;
+BEGIN
+    -- Cautăm un preț existent pentru acest produs (ca să nu punem preț 0 dacă e depozit nou)
+    -- Luăm prețul din orice alt depozit (ex: București)
+    BEGIN
+        SELECT pret_minim INTO v_pret_existent
+        FROM pcparts.STOC WHERE produs_id = p_produs_id AND ROWNUM = 1;
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN v_pret_existent := 0;
+    END;
+    
+    -- MERGE: Update sau Insert intr-o singura comanda
+    MERGE INTO pcparts.STOC s
+    USING DUAL ON (s.produs_id = p_produs_id AND s.depozit_id = p_depozit_id)
+    WHEN MATCHED THEN
+        UPDATE SET s.cantitate = s.cantitate + p_cantitate
+    WHEN NOT MATCHED THEN
+        INSERT (produs_id, depozit_id, cantitate, pret_minim)
+        VALUES (p_produs_id, p_depozit_id, p_cantitate, v_pret_existent);
+        
+    COMMIT;
+END;
+/
+
+-- Acordare Drepturi
+GRANT EXECUTE ON pcparts.ADMIN_APROVIZIONARE TO AGENT_VANZARI;
+CREATE OR REPLACE PUBLIC SYNONYM ADMIN_APROVIZIONARE FOR pcparts.ADMIN_APROVIZIONARE;
