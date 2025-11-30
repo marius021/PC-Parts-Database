@@ -85,6 +85,10 @@ class AdminPage(tk.Frame):
         self.configure(bg=COLOR_BG)
         self.controller = controller
         
+        # Maps pentru dropdown-uri (Nume -> ID)
+        self.cat_map = {}
+        self.producator_map = {}
+
         # Navbar
         nav = tk.Frame(self, bg=COLOR_DANGER, height=60)
         nav.pack(fill="x")
@@ -96,167 +100,162 @@ class AdminPage(tk.Frame):
         content = tk.Frame(self, bg=COLOR_BG, padx=20, pady=20)
         content.pack(fill="both", expand=True)
 
-        # Notebook (Tab-uri)
         self.notebook = ttk.Notebook(content)
         self.notebook.pack(fill="both", expand=True)
         
-        # Tab 1: Clienti
+        # Tab 1: Gestionare Clienti
         self.tab_clienti = tk.Frame(self.notebook, bg="white", padx=20, pady=20)
         self.notebook.add(self.tab_clienti, text=" 👥 Gestionare Clienți ")
         self.build_clienti_ui()
 
-        # Tab 2: Stocuri (NOU)
-        self.tab_stocuri = tk.Frame(self.notebook, bg="white", padx=20, pady=20)
-        self.notebook.add(self.tab_stocuri, text=" 📦 Gestiune Stocuri & Aprovizionare ")
-        self.build_stocuri_ui()
+        # Tab 2: Adaugare Produs (NOU)
+        self.tab_produse = tk.Frame(self.notebook, bg="white", padx=20, pady=20)
+        self.notebook.add(self.tab_produse, text=" 📦 Catalog & Adăugare Produs ")
+        self.build_produse_ui()
         
-        # Eveniment la schimbarea tab-ului (pentru refresh date)
+        # Eveniment Tab Change
         self.notebook.bind("<<NotebookTabChanged>>", self.on_tab_change)
 
     def on_tab_change(self, event):
-        # Facem refresh în funcție de tab-ul activ
         selected_tab = self.notebook.index(self.notebook.select())
         if selected_tab == 0:
             self.refresh_clienti()
         elif selected_tab == 1:
-            self.refresh_stocuri()
+            self.refresh_produse_data()
 
-    # ================= UI TAB STOCURI (NOU) =================
-    def build_stocuri_ui(self):
-        # 1. Filtre și KPI
-        frm_top = tk.Frame(self.tab_stocuri, bg="white")
-        frm_top.pack(fill="x", pady=(0, 10))
+    # ================= UI PRODUSE (NOU) =================
+    def build_produse_ui(self):
+        # 1. Formular Adaugare (Stanga)
+        frm_left = tk.LabelFrame(self.tab_produse, text="Definire Produs Nou", font=("Segoe UI", 10, "bold"), bg="white", padx=15, pady=15)
+        frm_left.pack(side="left", fill="y", padx=(0, 20))
 
-        tk.Label(frm_top, text="Filtrează după Depozit:", bg="white", font=("Segoe UI", 10, "bold")).pack(side="left")
-        self.combo_depozit = ttk.Combobox(frm_top, state="readonly", width=25)
-        self.combo_depozit.pack(side="left", padx=10)
-        self.combo_depozit.bind("<<ComboboxSelected>>", lambda e: self.refresh_stocuri())
+        # Denumire
+        tk.Label(frm_left, text="Denumire Produs:", bg="white").pack(anchor="w")
+        self.ent_p_nume = ttk.Entry(frm_left, width=30)
+        self.ent_p_nume.pack(pady=(0, 10))
 
-        self.lbl_total_val = tk.Label(frm_top, text="Valoare Totală Stoc: 0 RON", bg="#ecf0f1", fg=COLOR_PRIMARY, font=("Segoe UI", 10, "bold"), padx=10, pady=5)
-        self.lbl_total_val.pack(side="right")
+        # SKU
+        tk.Label(frm_left, text="Cod SKU (Unic):", bg="white").pack(anchor="w")
+        self.ent_p_sku = ttk.Entry(frm_left, width=30)
+        self.ent_p_sku.pack(pady=(0, 10))
 
-        # 2. Tabel Stocuri
-        cols = ("PRODUS", "SKU", "DEPOZIT", "CANTITATE", "PRET UNITAR", "VALOARE")
-        self.tree_stoc = ttk.Treeview(self.tab_stocuri, columns=cols, show="headings", height=12)
-        
-        for c in cols: self.tree_stoc.heading(c, text=c)
-        self.tree_stoc.column("CANTITATE", width=80, anchor="center")
-        self.tree_stoc.column("VALOARE", width=100, anchor="e")
-        self.tree_stoc.column("DEPOZIT", width=150)
-        
-        self.tree_stoc.pack(fill="both", expand=True)
-        
-        # 3. Zona Aprovizionare (Jos)
-        frm_action = tk.LabelFrame(self.tab_stocuri, text="Acțiuni Aprovizionare", bg="white", font=("Segoe UI", 10, "bold"), padx=10, pady=10)
-        frm_action.pack(fill="x", pady=10)
+        # Dropdown Categorie
+        tk.Label(frm_left, text="Categorie:", bg="white").pack(anchor="w")
+        self.cb_cat = ttk.Combobox(frm_left, state="readonly", width=28)
+        self.cb_cat.pack(pady=(0, 10))
 
-        tk.Label(frm_action, text="Selectează un produs din tabel și introdu cantitatea de adăugat:", bg="white").pack(side="left")
-        
-        self.ent_add_stoc = tk.Entry(frm_action, width=10, font=("Segoe UI", 10))
-        self.ent_add_stoc.pack(side="left", padx=10)
-        
-        ttk.Button(frm_action, text="➕ Adaugă Stoc (Intrare Marfă)", style="Accent.TButton", command=self.add_stock).pack(side="left")
+        # Dropdown Producator
+        tk.Label(frm_left, text="Producător:", bg="white").pack(anchor="w")
+        self.cb_prod = ttk.Combobox(frm_left, state="readonly", width=28)
+        self.cb_prod.pack(pady=(0, 10))
 
-    def refresh_stocuri(self):
-        # Golim tabelul
-        for i in self.tree_stoc.get_children(): self.tree_stoc.delete(i)
+        # Garantie & Pret
+        fr_grid = tk.Frame(frm_left, bg="white")
+        fr_grid.pack(fill="x", pady=5)
         
+        tk.Label(fr_grid, text="Garanție (luni):", bg="white").grid(row=0, column=0, sticky="w")
+        self.ent_p_gar = ttk.Entry(fr_grid, width=10)
+        self.ent_p_gar.insert(0, "24")
+        self.ent_p_gar.grid(row=1, column=0, padx=(0, 10))
+
+        tk.Label(fr_grid, text="Preț Listă (RON):", bg="white").grid(row=0, column=1, sticky="w")
+        self.ent_p_pret = ttk.Entry(fr_grid, width=10)
+        self.ent_p_pret.grid(row=1, column=1)
+
+        # Buton Save
+        ttk.Button(frm_left, text="💾 Salvează Produs în Bază", style="Accent.TButton", command=self.add_product_db).pack(pady=20, fill="x")
+
+
+        # 2. Lista Produse Existente (Dreapta)
+        frm_right = tk.LabelFrame(self.tab_produse, text="Produse Existente", font=("Segoe UI", 10, "bold"), bg="white", padx=10, pady=10)
+        frm_right.pack(side="right", fill="both", expand=True)
+
+        cols = ("ID", "NUME", "SKU", "CATEGORIE", "PRODUCATOR")
+        self.tree_prod = ttk.Treeview(frm_right, columns=cols, show="headings")
+        
+        self.tree_prod.heading("ID", text="ID")
+        self.tree_prod.column("ID", width=50)
+        self.tree_prod.heading("NUME", text="Denumiere")
+        self.tree_prod.column("NUME", width=150)
+        self.tree_prod.heading("SKU", text="SKU")
+        self.tree_prod.column("SKU", width=80)
+        self.tree_prod.heading("CATEGORIE", text="Categorie")
+        self.tree_prod.column("CATEGORIE", width=100)
+        self.tree_prod.heading("PRODUCATOR", text="Brand")
+        self.tree_prod.column("PRODUCATOR", width=80)
+
+        self.tree_prod.pack(fill="both", expand=True)
+
+
+    def refresh_produse_data(self):
+        # 1. Populam Dropdown-uri
         conn = self.get_conn()
         if not conn: return
         cur = conn.cursor()
-
-        # Populam Dropdown Depozite (daca e gol)
-        if not self.combo_depozit['values']:
-            try:
-                cur.execute("SELECT nume FROM DEPOZIT")
-                depos = ["Toate"] + [r[0] for r in cur]
-                self.combo_depozit['values'] = depos
-                self.combo_depozit.current(0)
-            except: pass
-
-        # Construim Query-ul dinamic
-        sql = """
-            SELECT p.denumire, p.cod_sku, d.nume, s.cantitate, s.pret_minim, (s.cantitate * s.pret_minim) as valoare, 
-                   p.produs_id, d.depozit_id
-            FROM STOC s
-            JOIN PRODUS p ON s.produs_id = p.produs_id
-            JOIN DEPOZIT d ON s.depozit_id = d.depozit_id
-        """
         
-        filtre = self.combo_depozit.get()
-        if filtre and filtre != "Toate":
-            sql += f" WHERE d.nume = '{filtre}'"
-        
-        sql += " ORDER BY s.cantitate ASC" # Vedem întâi produsele cu stoc mic
-
-        total_general = 0
         try:
+            # Categorii
+            cur.execute("SELECT categorie_id, nume FROM CATEGORIE")
+            self.cat_map = {row[1]: row[0] for row in cur}
+            self.cb_cat['values'] = list(self.cat_map.keys())
+
+            # Producatori
+            cur.execute("SELECT producator_id, nume FROM PRODUCATOR")
+            self.producator_map = {row[1]: row[0] for row in cur}
+            self.cb_prod['values'] = list(self.producator_map.keys())
+
+            # 2. Populam Tabelul
+            for i in self.tree_prod.get_children(): self.tree_prod.delete(i)
+            
+            sql = """
+                SELECT p.produs_id, p.denumire, p.cod_sku, c.nume, pr.nume
+                FROM PRODUS p
+                JOIN CATEGORIE c ON p.categorie_id = c.categorie_id
+                JOIN PRODUCATOR pr ON p.producator_id = pr.producator_id
+                ORDER BY p.produs_id DESC
+            """
             cur.execute(sql)
             for row in cur:
-                # row[0-5] sunt datele vizibile, row[6-7] sunt ID-urile ascunse (pentru update)
-                # Formatam preturile
-                pret = f"{row[4]:.2f}"
-                val = f"{row[5]:.2f}"
-                total_general += row[5]
-                
-                # Inseram in Treeview, dar salvam ID-urile in tag-ul 'values' extins sau intr-un dictionar
-                # Truc: Punem ID-urile la final in values, dar nu le definim in columns, deci nu se vad, dar se pot accesa
-                item_id = self.tree_stoc.insert("", "end", values=(row[0], row[1], row[2], row[3], pret, val))
-                # Salvam ID-urile reale in dictionarul item-ului pentru a le folosi la update
-                self.tree_stoc.set(item_id, column="#0", value=f"{row[6]}|{row[7]}") # Hack: stocam in coloana #0 ascunsa
-                
-                # Coloram randurile cu stoc critic (<10)
-                if row[3] < 10:
-                    self.tree_stoc.item(item_id, tags=('critic',))
-
-            self.tree_stoc.tag_configure('critic', foreground='red')
-            self.lbl_total_val.config(text=f"Valoare Totală Stoc: {total_general:,.2f} RON")
+                self.tree_prod.insert("", "end", values=row)
 
         except Exception as e: print(e)
         finally: conn.close()
 
-    def add_stock(self):
-        sel = self.tree_stoc.selection()
-        if not sel:
-            messagebox.showwarning("Atenție", "Selectează un produs din tabel pentru aprovizionare!")
+    def add_product_db(self):
+        # Validari
+        nume = self.ent_p_nume.get()
+        sku = self.ent_p_sku.get()
+        cat_name = self.cb_cat.get()
+        prod_name = self.cb_prod.get()
+        gar = self.ent_p_gar.get()
+        pret = self.ent_p_pret.get()
+
+        if not all([nume, sku, cat_name, prod_name, gar, pret]):
+            messagebox.showwarning("Incomplet", "Toate câmpurile sunt obligatorii!")
             return
-        
-        qty_str = self.ent_add_stoc.get()
-        if not qty_str.isdigit():
-            messagebox.showerror("Eroare", "Introdu o cantitate validă (număr întreg)!")
-            return
-        
-        # Recuperam ID-urile salvate. 
-        # Nota: In Treeview standard e greu sa ascunzi coloane si sa iei date din ele.
-        # Vom face un query rapid bazat pe numele selectat sau folosim metoda mai sigura:
-        # Preluam valorile vizibile
-        values = self.tree_stoc.item(sel[0])['values']
-        prod_nume = values[0]
-        depozit_nume = values[2]
-        
+
         try:
+            cat_id = self.cat_map[cat_name]
+            prod_id = self.producator_map[prod_name]
+            
             conn = self.get_conn()
             cur = conn.cursor()
             
-            # 1. Aflam ID-urile reale (SQL rapid)
-            cur.execute("SELECT produs_id FROM PRODUS WHERE denumire = :1", [prod_nume])
-            pid = cur.fetchone()[0]
-            cur.execute("SELECT depozit_id FROM DEPOZIT WHERE nume = :1", [depozit_nume])
-            did = cur.fetchone()[0]
-            
-            # 2. Apeleaza Procedura
-            cur.callproc("ADMIN_UPDATE_STOC", [pid, did, int(qty_str)])
+            cur.callproc("ADMIN_ADAUGA_PRODUS_NOU", [nume, sku, cat_id, prod_id, int(gar), float(pret)])
             conn.close()
             
-            messagebox.showinfo("Succes", f"Stoc actualizat pentru {prod_nume}!\n(+{qty_str} buc)")
-            self.ent_add_stoc.delete(0, tk.END)
-            self.refresh_stocuri()
+            messagebox.showinfo("Succes", f"Produsul {nume} a fost creat!")
+            
+            # Reset
+            self.ent_p_nume.delete(0, tk.END)
+            self.ent_p_sku.delete(0, tk.END)
+            self.refresh_produse_data()
             
         except Exception as e:
-            messagebox.showerror("Eroare DB", str(e))
+            messagebox.showerror("Eroare", str(e))
 
-
-    # ================= UI TAB CLIENTI (CEL VECHI) =================
+    # ================= UI CLIENTI (La fel ca inainte) =================
+   
     def build_clienti_ui(self):
         # Formular Adaugare
         frm_add = tk.LabelFrame(self.tab_clienti, text="Adăugare Client Nou", font=("Segoe UI", 10, "bold"), bg="white", padx=10, pady=10)
