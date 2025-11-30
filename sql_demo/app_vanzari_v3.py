@@ -121,6 +121,71 @@ class AdminPage(tk.Frame):
         # Eveniment Tab Change
         self.notebook.bind("<<NotebookTabChanged>>", self.on_tab_change)
 
+    #
+    def view_stock_distribution(self):
+        # 1. Verificăm ce produs e selectat
+        sel = self.tree_prod.selection()
+        if not sel:
+            messagebox.showwarning("Atenție", "Selectează un produs din tabel pentru a vedea stocul!")
+            return
+        
+        item = self.tree_prod.item(sel[0])
+        prod_id = item['values'][0]
+        prod_nume = item['values'][1]
+
+        # 2. Creăm o fereastră Pop-up (Toplevel)
+        top = tk.Toplevel(self)
+        top.title(f"Distribuție Stoc: {prod_nume}")
+        top.geometry("400x300")
+        top.configure(bg="white")
+
+        tk.Label(top, text=f"Stocuri per Depozit\n{prod_nume}", font=("Segoe UI", 12, "bold"), bg="white", fg="#2c3e50").pack(pady=10)
+
+        # Tabel mic în popup
+        cols = ("DEPOZIT", "ORAS", "CANTITATE")
+        tree_dist = ttk.Treeview(top, columns=cols, show="headings", height=8)
+        
+        tree_dist.heading("DEPOZIT", text="Depozit")
+        tree_dist.column("DEPOZIT", width=150)
+        tree_dist.heading("ORAS", text="Oraș")
+        tree_dist.column("ORAS", width=100)
+        tree_dist.heading("CANTITATE", text="Cantitate")
+        tree_dist.column("CANTITATE", width=80, anchor="center")
+        
+        tree_dist.pack(fill="both", expand=True, padx=10, pady=10)
+
+        # 3. Interogăm Baza de Date
+        # Aici facem un SELECT care grupează stocul pe depozite pentru produsul ales
+        try:
+            conn = self.get_conn()
+            cur = conn.cursor()
+            
+            sql = """
+                SELECT d.nume, d.oras, s.cantitate
+                FROM STOC s
+                JOIN DEPOZIT d ON s.depozit_id = d.depozit_id
+                WHERE s.produs_id = :1
+                ORDER BY s.cantitate DESC
+            """
+            cur.execute(sql, [prod_id])
+            
+            total = 0
+            has_data = False
+            for row in cur:
+                has_data = True
+                tree_dist.insert("", "end", values=row)
+                total += row[2]
+            
+            if not has_data:
+                tk.Label(top, text="Nu există stoc în niciun depozit.", fg="red", bg="white").pack()
+            
+            # Afișăm și totalul global jos
+            tk.Label(top, text=f"TOTAL GLOBAL: {total} buc", font=("Segoe UI", 11, "bold"), bg="#ecf0f1", pady=5).pack(fill="x")
+
+            conn.close()
+        except Exception as e:
+            messagebox.showerror("Eroare", str(e))
+            
     def on_tab_change(self, event):
         selected_tab = self.notebook.index(self.notebook.select())
         if selected_tab == 0: self.refresh_clienti()
@@ -279,7 +344,7 @@ class AdminPage(tk.Frame):
         ttk.Button(frm_left, text="💾 Salvează Produs în Bază", style="Accent.TButton", command=self.add_product_db).pack(pady=20, fill="x")
 
 
-        # 2. Lista Produse Existente (Dreapta)
+        # 2. Lista Produse Existente (Dreapta) - ACTUALIZAT
         frm_right = tk.LabelFrame(self.tab_produse, text="Produse Existente", font=("Segoe UI", 10, "bold"), bg="white", padx=10, pady=10)
         frm_right.pack(side="right", fill="both", expand=True)
 
@@ -288,7 +353,7 @@ class AdminPage(tk.Frame):
         
         self.tree_prod.heading("ID", text="ID")
         self.tree_prod.column("ID", width=50)
-        self.tree_prod.heading("NUME", text="Denumiere")
+        self.tree_prod.heading("NUME", text="Denumire")
         self.tree_prod.column("NUME", width=150)
         self.tree_prod.heading("SKU", text="SKU")
         self.tree_prod.column("SKU", width=80)
@@ -298,6 +363,13 @@ class AdminPage(tk.Frame):
         self.tree_prod.column("PRODUCATOR", width=80)
 
         self.tree_prod.pack(fill="both", expand=True)
+
+        # === BUTONUL NOU PENTRU DISTRIBUȚIE ===
+        btn_frame = tk.Frame(frm_right, bg="white", pady=10)
+        btn_frame.pack(fill="x")
+        
+        ttk.Button(btn_frame, text="📍 Vezi Distribuție Stoc pe Orașe", style="Accent.TButton", 
+                   command=self.view_stock_distribution).pack(side="right")
 
 
     def refresh_produse_data(self):
