@@ -58,7 +58,7 @@ class MainApp(tk.Tk):
         if hasattr(frame, 'refresh_data'):
             frame.refresh_data()
 
-# ================= LOGIN PAGE (DESIGN MODERN) =================
+# ================= LOGIN PAGE =================
 class LoginPage(tk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent)
@@ -131,7 +131,7 @@ class AdminPage(tk.Frame):
         elif selected_tab == 2: self.refresh_comenzi()
 
     # =========================================================================
-    # TAB 3: COMENZI (UI FIXAT - RESPONSIVE)
+    # TAB 3: COMENZI
     # =========================================================================
     def build_comenzi_ui(self):
         # 1. ZONA ACTIUNI (JOS) - Prioritate la Layout
