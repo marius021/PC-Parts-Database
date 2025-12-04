@@ -53,5 +53,7 @@ SELECT * FROM STANDARD;
 - COMANDA_VANZARE 1–N EXPEDIERE
 - CLIENT 1–N RMA; PRODUS 1–N RMA; COMANDA_VANZARE
  0..1–N RMA (opțional)
+========================================================================
 
-test apple
+S-a implementat o varianta mai simpla, functionala, cu interfata pentru Admin si pentru Agentul de vanzari.
+-- Se mai pot face imbunatatiri ( TBA )
