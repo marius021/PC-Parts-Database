@@ -56,4 +56,7 @@ SELECT * FROM STANDARD;
 ========================================================================
 
 S-a implementat o varianta mai simpla, functionala, cu interfata pentru Admin si pentru Agentul de vanzari.
--- Se mai pot face imbunatatiri ( TBA )
+-- IMBUNATATIRI ( TO BE TESTED )
+* In dreptul comenzii care va fi expediata cu un serviciu de curierat sa apara si awb ul
+* AWB care se va genera random pe baza unei structuri
+* Dezvoltare UI/UX - eventual extensie 
