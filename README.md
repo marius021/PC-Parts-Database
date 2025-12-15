@@ -59,4 +59,6 @@ S-a implementat o varianta mai simpla, functionala, cu interfata pentru Admin si
 -- IMBUNATATIRI ( TO BE TESTED )
 * In dreptul comenzii care va fi expediata cu un serviciu de curierat sa apara si awb ul
 * AWB care se va genera random pe baza unei structuri
-* Dezvoltare UI/UX - eventual extensie 
+* Dezvoltare UI/UX - eventual extensie
+* Evntuale idei pentru implementarea unei aplicatii stand alone pe pc? java?
+  
