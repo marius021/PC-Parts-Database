@@ -61,4 +61,5 @@ S-a implementat o varianta mai simpla, functionala, cu interfata pentru Admin si
 * AWB care se va genera random pe baza unei structuri
 * Dezvoltare UI/UX - eventual extensie
 * Evntuale idei pentru implementarea unei aplicatii stand alone pe pc? java?
+* Dezvoltare idei pentru o aplicatie de mobil? Flutter/Android Studio?
   
