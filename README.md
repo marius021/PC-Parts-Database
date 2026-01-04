@@ -62,4 +62,5 @@ S-a implementat o varianta mai simpla, functionala, cu interfata pentru Admin si
 * Dezvoltare UI/UX - eventual extensie
 * Evntuale idei pentru implementarea unei aplicatii stand alone pe pc? java?
 * Dezvoltare idei pentru o aplicatie de mobil? Flutter/Android Studio?
+* Populare DATABASE cu mai multe entry-uri [script python care ia datele dintr-un dataset si le insereaza in databse]
   
