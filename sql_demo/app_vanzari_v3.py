@@ -133,12 +133,14 @@ class AdminPage(tk.Frame):
     # =========================================================================
     # TAB 3: COMENZI
     # =========================================================================
+    # =========================================================================
+    # ACTUALIZARE UI PENTRU AWB
+    # =========================================================================
     def build_comenzi_ui(self):
-        # 1. ZONA ACTIUNI (JOS) - Prioritate la Layout
+        # 1. ZONA ACTIUNI (JOS)
         frm_actions = tk.LabelFrame(self.tab_comenzi, text="Acțiuni Comandă Selectată", font=("Segoe UI", 10, "bold"), bg="white", padx=10, pady=10)
         frm_actions.pack(side="bottom", fill="x", pady=(10, 0))
 
-        # Centrare butoane
         btn_center = tk.Frame(frm_actions, bg="white")
         btn_center.pack(anchor="center")
 
@@ -162,16 +164,18 @@ class AdminPage(tk.Frame):
         frm_table = tk.Frame(self.tab_comenzi, bg="white")
         frm_table.pack(side="top", fill="both", expand=True)
 
-        cols = ("ID", "CLIENT", "DATA", "LIVRARE", "TOTAL", "STATUS")
+        # === AICI AM ADAUGAT COLOANA 'AWB' ===
+        cols = ("ID", "CLIENT", "DATA", "LIVRARE", "AWB", "TOTAL", "STATUS")
         self.tree_cmd = ttk.Treeview(frm_table, columns=cols, show="headings", selectmode="browse")
         
         for c in cols: self.tree_cmd.heading(c, text=c)
         
-        # Configurare lățimi
+        # Configurare lățimi (am ajustat ca să încapă AWB)
         self.tree_cmd.column("ID", width=50, anchor="center")
-        self.tree_cmd.column("CLIENT", width=150)
+        self.tree_cmd.column("CLIENT", width=140)
         self.tree_cmd.column("DATA", width=80, anchor="center")
         self.tree_cmd.column("LIVRARE", width=100)
+        self.tree_cmd.column("AWB", width=100, anchor="center") # Coloana AWB
         self.tree_cmd.column("TOTAL", width=80, anchor="e")
         self.tree_cmd.column("STATUS", width=100, anchor="center")
 
@@ -192,23 +196,28 @@ class AdminPage(tk.Frame):
         try:
             conn = self.get_conn()
             cur = conn.cursor()
-            sql = "SELECT cv_id, nume_client, data_creare, metoda_livrare, valoare_totala, status FROM V_ISTORIC_SUMAR ORDER BY cv_id DESC"
+            # Selectam si AWB-ul din vedere (index 5 in SQL, deci row[5])
+            sql = "SELECT cv_id, nume_client, data_creare, metoda_livrare, valoare_totala, status, awb FROM V_ISTORIC_SUMAR ORDER BY cv_id DESC"
             cur.execute(sql)
             for row in cur:
+                # row structure: 0=id, 1=nume, 2=data, 3=livrare, 4=total, 5=status, 6=awb
                 status_db = row[5]
                 if filtre != "Toate" and filtre != status_db: continue
 
                 data_fmt = row[2].strftime('%d-%m-%Y') if row[2] else ""
                 bani = f"{row[4]:.2f} RON" if row[4] else "0.00 RON"
+                awb_text = row[6] if row[6] else "-" # Daca e null, punem liniuta
                 
                 tag = 'noua'
                 if status_db == 'Finalizata': tag = 'finalizata'
                 elif status_db == 'In Procesare': tag = 'procesare'
                 elif status_db == 'Anulata': tag = ''
 
-                self.tree_cmd.insert("", "end", values=(row[0], row[1], data_fmt, row[3], bani, status_db), tags=(tag,))
+                # Inseram in ordinea coloanelor definite in Treeview
+                self.tree_cmd.insert("", "end", values=(row[0], row[1], data_fmt, row[3], awb_text, bani, status_db), tags=(tag,))
             conn.close()
-        except: pass
+        except Exception as e:
+            print(e)
 
     def change_status(self, new_status):
         sel = self.tree_cmd.selection()
