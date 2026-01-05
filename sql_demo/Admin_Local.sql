@@ -365,3 +365,55 @@ END;
 -- Acordare Drepturi
 GRANT EXECUTE ON pcparts.ADMIN_APROVIZIONARE TO AGENT_VANZARI;
 CREATE OR REPLACE PUBLIC SYNONYM ADMIN_APROVIZIONARE FOR pcparts.ADMIN_APROVIZIONARE;
+
+-- IMPLEMENTARE LOGICA PENTRU AWB
+-- 1. Adăugăm coloana AWB în tabelul de comenzi (dacă nu există deja)
+ALTER TABLE pcparts.COMANDA_VANZARE ADD awb VARCHAR2(50);
+
+-- 2. Actualizăm Vederea (View) pentru a include și coloana AWB
+CREATE OR REPLACE VIEW pcparts.V_ISTORIC_SUMAR AS
+SELECT 
+    cv.cv_id,
+    c.nume AS nume_client,
+    cv.data_creare,
+    cv.metoda_livrare,
+    cv.status,
+    cv.awb,  -- Am adăugat coloana AWB
+    (SELECT SUM(l.cantitate * l.pret_unitar * (1 - l.discount/100)) 
+     FROM pcparts.CV_LINIE l 
+     WHERE l.cv_id = cv.cv_id) AS valoare_totala
+FROM pcparts.COMANDA_VANZARE cv
+JOIN pcparts.CLIENT c ON cv.client_id = c.client_id
+ORDER BY cv.cv_id DESC;
+
+-- 3. Modificăm Procedura de Status pentru a Genera AWB-ul automat
+CREATE OR REPLACE PROCEDURE pcparts.ADMIN_UPDATE_STATUS_COMANDA (
+    p_cv_id IN NUMBER,
+    p_status_nou IN VARCHAR2
+) AS
+    v_livrare VARCHAR2(100);
+    v_awb_nou VARCHAR2(50);
+BEGIN
+    -- Aflăm metoda de livrare pentru comanda respectivă
+    SELECT metoda_livrare INTO v_livrare 
+    FROM pcparts.COMANDA_VANZARE WHERE cv_id = p_cv_id;
+
+    -- Dacă statusul devine 'Finalizata' și NU e ridicare personală, generăm AWB
+    IF p_status_nou = 'Finalizata' AND v_livrare != 'Ridicare Personala' THEN
+        -- Generăm un AWB random format din: RO + Anul curent + 6 cifre aleatoare
+        -- Exemplu: RO2025884921
+        v_awb_nou := 'RO' || TO_CHAR(SYSDATE, 'YYYY') || TRUNC(DBMS_RANDOM.VALUE(100000, 999999));
+        
+        UPDATE pcparts.COMANDA_VANZARE
+        SET status = p_status_nou, awb = v_awb_nou
+        WHERE cv_id = p_cv_id;
+    ELSE
+        -- Dacă e ridicare personală sau alt status, doar actualizăm statusul (fără AWB)
+        UPDATE pcparts.COMANDA_VANZARE
+        SET status = p_status_nou
+        WHERE cv_id = p_cv_id;
+    END IF;
+    
+    COMMIT;
+END;
+/
