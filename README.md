@@ -53,5 +53,14 @@ SELECT * FROM STANDARD;
 - COMANDA_VANZARE 1–N EXPEDIERE
 - CLIENT 1–N RMA; PRODUS 1–N RMA; COMANDA_VANZARE
  0..1–N RMA (opțional)
+========================================================================
 
-test apple
+S-a implementat o varianta mai simpla, functionala, cu interfata pentru Admin si pentru Agentul de vanzari.
+-- IMBUNATATIRI ( TO BE TESTED )
+* In dreptul comenzii care va fi expediata cu un serviciu de curierat sa apara si awb ul
+* AWB care se va genera random pe baza unei structuri
+* Dezvoltare UI/UX - eventual extensie
+* Evntuale idei pentru implementarea unei aplicatii stand alone pe pc? java?
+* Dezvoltare idei pentru o aplicatie de mobil? Flutter/Android Studio?
+* Populare DATABASE cu mai multe entry-uri [script python care ia datele dintr-un dataset si le insereaza in databse]
+  
