@@ -57,8 +57,7 @@ SELECT * FROM STANDARD;
 
 S-a implementat o varianta mai simpla, functionala, cu interfata pentru Admin si pentru Agentul de vanzari.
 -- IMBUNATATIRI ( TO BE TESTED )
-* In dreptul comenzii care va fi expediata cu un serviciu de curierat sa apara si awb ul
-* AWB care se va genera random pe baza unei structuri
+* De adaugat filtru pentru comenzile anulate
 * Dezvoltare UI/UX - eventual extensie
 * Evntuale idei pentru implementarea unei aplicatii stand alone pe pc? java?
 * Dezvoltare idei pentru o aplicatie de mobil? Flutter/Android Studio?
