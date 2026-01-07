@@ -417,3 +417,50 @@ BEGIN
     COMMIT;
 END;
 /
+
+-- QUICK FIX AWB
+--Există deja un AWB generat pentru comanda asta?".
+    --Dacă DA -> Păstrează-l pe cel vechi.
+    --Dacă NU (e NULL) -> Generează unul nou.
+
+    CREATE OR REPLACE PROCEDURE pcparts.ADMIN_UPDATE_STATUS_COMANDA (
+    p_cv_id IN NUMBER,
+    P_status_nou IN VARCHAR2
+) AS
+v_livrare VARCHAR2(100);
+    v_awb_existent VARCHAR2(50); -- Variabilă pentru a ține minte AWB-ul actual
+    v_awb_nou VARCHAR2(50);
+BEGIN
+    -- 1. Citim Metoda de livrare ȘI AWB-ul existent
+    SELECT metoda_livrare, awb INTO v_livrare, v_awb_existent
+    FROM pcparts.COMANDA_VANZARE 
+    WHERE cv_id = p_cv_id;
+
+    -- 2. Logica de generare
+    IF p_status_nou = 'Finalizata' AND v_livrare != 'Ridicare Personala' THEN
+        
+        -- VERIFICAREA CHEIE: Generăm doar dacă NU există deja unul!
+        IF v_awb_existent IS NULL THEN
+            -- Generare AWB Nou
+            v_awb_nou := 'RO' || TO_CHAR(SYSDATE, 'YYYY') || TRUNC(DBMS_RANDOM.VALUE(100000, 999999));
+            
+            UPDATE pcparts.COMANDA_VANZARE
+            SET status = p_status_nou, awb = v_awb_nou
+            WHERE cv_id = p_cv_id;
+        ELSE
+            -- Dacă există deja AWB, actualizăm doar statusul, lăsăm AWB-ul vechi
+            UPDATE pcparts.COMANDA_VANZARE
+            SET status = p_status_nou
+            WHERE cv_id = p_cv_id;
+        END IF;
+
+    ELSE
+        -- Pentru orice alt status sau Ridicare Personală, doar actualizăm statusul
+        UPDATE pcparts.COMANDA_VANZARE
+        SET status = p_status_nou
+        WHERE cv_id = p_cv_id;
+    END IF;
+    
+    COMMIT;
+END;
+/
