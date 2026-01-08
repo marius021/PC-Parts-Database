@@ -1,6 +1,6 @@
 # 🖥️ PC Parts Manager - Sistem Distribuit de Gestiune
 
-![Status](https://img.shields.io/badge/Status-Finalizat-success)
+![Status](https://img.shields.io/badge/Status-Work_in_Progress-yellow)
 ![Database](https://img.shields.io/badge/Oracle-Database_23c-red)
 ![Frontend](https://img.shields.io/badge/Python-Tkinter-blue)
 
