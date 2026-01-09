@@ -153,7 +153,9 @@ class AdminPage(tk.Frame):
         frm_filter.pack(side="top", fill="x")
         
         tk.Label(frm_filter, text="Filtrează Status:", bg="white", font=("Segoe UI", 10, "bold")).pack(side="left", padx=(0, 5))
-        self.cb_filter_status = ttk.Combobox(frm_filter, values=["Toate", "In Asteptare", "In Procesare", "Finalizata"], state="readonly", width=15)
+        
+        # === MODIFICARE AICI: Am adăugat "Anulata" în listă ===
+        self.cb_filter_status = ttk.Combobox(frm_filter, values=["Toate", "In Asteptare", "In Procesare", "Finalizata", "Anulata"], state="readonly", width=15)
         self.cb_filter_status.current(0)
         self.cb_filter_status.pack(side="left", padx=5)
         self.cb_filter_status.bind("<<ComboboxSelected>>", lambda e: self.refresh_comenzi())
@@ -164,18 +166,16 @@ class AdminPage(tk.Frame):
         frm_table = tk.Frame(self.tab_comenzi, bg="white")
         frm_table.pack(side="top", fill="both", expand=True)
 
-        # === AICI AM ADAUGAT COLOANA 'AWB' ===
         cols = ("ID", "CLIENT", "DATA", "LIVRARE", "AWB", "TOTAL", "STATUS")
         self.tree_cmd = ttk.Treeview(frm_table, columns=cols, show="headings", selectmode="browse")
         
         for c in cols: self.tree_cmd.heading(c, text=c)
         
-        # Configurare lățimi (am ajustat ca să încapă AWB)
         self.tree_cmd.column("ID", width=50, anchor="center")
         self.tree_cmd.column("CLIENT", width=140)
         self.tree_cmd.column("DATA", width=80, anchor="center")
         self.tree_cmd.column("LIVRARE", width=100)
-        self.tree_cmd.column("AWB", width=100, anchor="center") # Coloana AWB
+        self.tree_cmd.column("AWB", width=100, anchor="center")
         self.tree_cmd.column("TOTAL", width=80, anchor="e")
         self.tree_cmd.column("STATUS", width=100, anchor="center")
 
@@ -185,10 +185,11 @@ class AdminPage(tk.Frame):
         self.tree_cmd.pack(side="left", fill="both", expand=True)
         sb.pack(side="right", fill="y")
 
-        # Culori
+        # === MODIFICARE AICI: Am adăugat tag-ul pentru 'anulata' (Gri) ===
         self.tree_cmd.tag_configure('noua', foreground='#e67e22') 
         self.tree_cmd.tag_configure('finalizata', foreground='green', font=("Segoe UI", 9, "bold")) 
         self.tree_cmd.tag_configure('procesare', foreground='#2980b9')
+        self.tree_cmd.tag_configure('anulata', foreground='#7f8c8d') # Gri închis
 
     def refresh_comenzi(self):
         for i in self.tree_cmd.get_children(): self.tree_cmd.delete(i)
@@ -196,24 +197,24 @@ class AdminPage(tk.Frame):
         try:
             conn = self.get_conn()
             cur = conn.cursor()
-            # Selectam si AWB-ul din vedere (index 5 in SQL, deci row[5])
             sql = "SELECT cv_id, nume_client, data_creare, metoda_livrare, valoare_totala, status, awb FROM V_ISTORIC_SUMAR ORDER BY cv_id DESC"
             cur.execute(sql)
             for row in cur:
-                # row structure: 0=id, 1=nume, 2=data, 3=livrare, 4=total, 5=status, 6=awb
                 status_db = row[5]
+                
+                # Filtrul funcționează automat acum pentru că "Anulata" == status_db
                 if filtre != "Toate" and filtre != status_db: continue
 
                 data_fmt = row[2].strftime('%d-%m-%Y') if row[2] else ""
                 bani = f"{row[4]:.2f} RON" if row[4] else "0.00 RON"
-                awb_text = row[6] if row[6] else "-" # Daca e null, punem liniuta
+                awb_text = row[6] if row[6] else "-"
                 
+                # === MODIFICARE AICI: Atribuire tag 'anulata' ===
                 tag = 'noua'
                 if status_db == 'Finalizata': tag = 'finalizata'
                 elif status_db == 'In Procesare': tag = 'procesare'
-                elif status_db == 'Anulata': tag = ''
+                elif status_db == 'Anulata': tag = 'anulata'
 
-                # Inseram in ordinea coloanelor definite in Treeview
                 self.tree_cmd.insert("", "end", values=(row[0], row[1], data_fmt, row[3], awb_text, bani, status_db), tags=(tag,))
             conn.close()
         except Exception as e:
