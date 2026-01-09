@@ -1,59 +1,87 @@
-# 🧩 PC Parts Database (Oracle SQL Project)
+# 🖥️ PC Parts Manager - Sistem Distribuit de Gestiune
 
-This project implements a relational database for a **PC components supplier** using **Oracle Database**.
+![Status](https://img.shields.io/badge/Status-Work_in_Progress-yellow)
+![Database](https://img.shields.io/badge/Oracle-Database_23c-red)
+![Frontend](https://img.shields.io/badge/Python-Tkinter-blue)
 
-## 📦 Structure
+**PC Parts Manager** este o aplicație software complexă de tip ERP (Enterprise Resource Planning) destinată gestionării unui lanț de magazine de componente IT. Sistemul este construit pe o arhitectură de **Bază de Date Distribuită**, simulând operarea în multiple puncte de lucru (București, Cluj-Napoca, Timișoara).
 
-- `schema_oracle.sql` — Creates all tables, relationships and constraints.
-- `prepare_raw_data.py` — Processes raw CSV datasets into a unified `products_raw.csv`.
-- `etl_populate_db_v2.py` — Generates SQL inserts (`populate.sql`) from the processed data.
-- `standards_mapping.csv` — Maps column names to standards (socket, form factor, etc.).
-- `pcparts_erd.drawio` — Entity-Relationship Diagram for the schema.
-- `output/populate.sql` — Ready-to-run SQL insert script.
+---
 
-## 🧰 How to Use
+## 🚀 Funcționalități Cheie
 
-1. Run `prepare_raw_data.py` to unify and clean datasets.
-2. Generate inserts with `etl_populate_db_v2.py`.
-3. Execute `schema_oracle.sql` then `output/populate.sql` in Oracle (FREEPDB1).
-4. Check the data using example queries in `quickcheck.sql` (optional).
+### 1. Arhitectură Distribuită (BDD)
+* **Fragmentare Orizontală:** Stocurile și comenzile sunt distribuite pe servere logice în funcție de locație (`depozit_id`).
+* **Fragmentare Verticală:** Datele sensibile ale clienților (financiare) sunt separate de cele operaționale (vânzări).
+* **Replicare:** Nomenclatoarele (Produse, Categorii) sunt replicate total pentru performanță maximă la interogare.
 
-## ⚒️ Work in Progress Status
-- Implemented script to populate tables with data from different merged datasets.
-- Implemented script to populate tables with a minimum ammount of data.
-- 
-## 📊 Example Queries
+### 2. Roluri și Securitate
+Aplicația implementează un sistem de autentificare securizat cu roluri distincte:
+* **👨‍💼 Agent Vânzări:**
+    * Procesare comenzi cu verificare stoc în timp real.
+    * Vizualizare istoric vânzări proprii.
+    * Calcul automat al prețului final (inclusiv discount-uri).
+* **🛠️ Administrator:**
+    * **Supply Chain:** Aprovizionare marfă (Intrări Stoc) folosind logica *Upsert* (Merge).
+    * **Catalog:** Definire și adăugare produse noi.
+    * **Logistică:** Monitorizare comenzi, schimbare status (`În Procesare` -> `Finalizată`) și **Generare Automată AWB**.
+    * **Analytics:** Vizualizarea distribuției stocului pe orașe.
 
-```sql
-SELECT COUNT(*) FROM PRODUS;
-SELECT * FROM STANDARD;
-.
-```
-## Conceptual design
- # Main entities
-- PRODUCATOR (producator_id PK): nume (unic), tara, website
-- CATEGORIE (categorie_id PK): nume (unic), descriere
-- STANDARD (standard_id PK): grup (ex. SOCKET_CPU,MEM_TYPE), cod (ex. AM5,DDR5), descriere
-- PRODUS (produs_id PK): cod_sku (unic), denumire, garantie_luni, status, FK: categorie_id, producator_id
-- PRODUS_STANDARD (PK compus): FK: produs_id, standard_id (M:N între PRODUS și STANDARD)
-- DEPOZIT (depozit_id PK): nume, oras, tara (UNIQUE pe (nume,oras,tara))
-- STOC (PK compus): produs_id, depozit_id, cantitate, prag_minim
-- CLIENT (client_id PK): tip (B2B/B2C), nume, cod_fiscal, tara, categoria_pret
-- COMANDA_VANZARE (cv_id PK): client_id (FK), data_creare, status, metoda_livrare
-- CV_LINIE (cv_linie_id PK): cv_id (FK), linie_nr (UNIQUE pe (cv_id, linie_nr)), produs_id (FK), cantitate, pret_unitar, discount
-- EXPEDIERE (expediere_id PK): cv_id (FK), depozit_id (FK), curier, awb, data_expediere
-- RMA (rma_id PK): client_id (FK), produs_id (FK), cv_id (FK opțional), motiv, status, data_creare
+---
 
-# Relații cheie:
-- PRODUCATOR 1–N PRODUS
-- CATEGORIE 1–N PRODUS
-- PRODUS M–N STANDARD prin PRODUS_STANDARD
-- RODUS 1–N STOC (per DEPOZIT)
-- CLIENT 1–N COMANDA_VANZARE; COMANDA_VANZARE 1–N CV_LINIE
-- COMANDA_VANZARE 1–N EXPEDIERE
-- CLIENT 1–N RMA; PRODUS 1–N RMA; COMANDA_VANZARE
- 0..1–N RMA (opțional)
-========================================================================
+## 🛠️ Tehnologii Utilizate
+
+* **Backend (Database):**
+    * **Oracle Database** (PL/SQL).
+    * Proceduri Stocate pentru logica tranzacțională (ACID).
+    * Vederi (Views) pentru raportare.
+    * Triggere și secvențe pentru auto-incrementare.
+* **Frontend (GUI):**
+    * **Python 3.x**
+    * **Tkinter** (Interfață grafică modernă, responsive).
+    * **ttk** (Widgets stilizate).
+* **Conectivitate:**
+    * Librăria `oracledb` (Thin Client).
+
+---
+
+## 📸 Capturi de Ecran (Screenshots)
+
+### 1. Dashboard Administrator - Gestiune Comenzi & AWB
+*Monitorizarea statusului comenzilor. Comenzile finalizate primesc automat un AWB unic.*
+![Admin Dashboard](link_catre_poza_ta_cu_admin_comenzi.png)
+
+### 2. Distribuția Stocului pe Orașe
+*Vizualizarea stocului fragmentat pe depozitele din țară.*
+![Distributie Stoc](link_catre_poza_ta_cu_popup_stoc.png)
+
+### 3. Interfața Agent - Vânzare Rapidă
+*Formular de vânzare cu feedback vizual pentru stoc critic.*
+![Agent UI](link_catre_poza_ta_cu_agent_vanzare.png)
+
+---
+
+## ⚙️ Instalare și Rulare
+
+### Cerințe Preliminare
+* Python 3.10+
+* Oracle Database (Local sau Cloud)
+* Oracle Instant Client (opțional, depinde de setup)
+
+### Pasul 1: Configurare Bază de Date
+Rulează scripturile din folderul `/sql` în ordinea următoare folosind SQL Developer:
+1.  `01_create_tables.sql` - Crearea structurii.
+2.  `02_populate_data.sql` - Inserarea datelor de test.
+3.  `03_procedures.sql` - Compilarea procedurilor stocate (`ADMIN_APROVIZIONARE`, `ADAUGA_COMANDA`, etc.).
+
+### Pasul 2: Configurare Python
+```bash
+# Clonează repository-ul
+git clone [https://github.com/userul-tau/pc-parts-manager.git](https://github.com/userul-tau/pc-parts-manager.git)
+
+pip install oracledb
+
+-- to be implemented
 
 S-a implementat o varianta mai simpla, functionala, cu interfata pentru Admin si pentru Agentul de vanzari.
 -- IMBUNATATIRI ( TO BE TESTED )
