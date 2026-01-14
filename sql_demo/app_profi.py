@@ -115,41 +115,90 @@ class AdminPage(ttk.Frame):
     # --- DASHBOARD ---
     def build_dashboard_ui(self):
         ttk.Label(self.tab_dashboard, text="Analiză Performanță", font=("Helvetica", 16, "bold")).pack(pady=(0, 20), anchor="w")
+        
+        # Container principal
         self.charts_frame = ttk.Frame(self.tab_dashboard)
         self.charts_frame.pack(fill=BOTH, expand=YES)
-        self.fr_left = ttk.Frame(self.charts_frame); self.fr_left.pack(side=LEFT, fill=BOTH, expand=YES, padx=10)
-        self.fr_right = ttk.Frame(self.charts_frame); self.fr_right.pack(side=RIGHT, fill=BOTH, expand=YES, padx=10)
+        
+        # Configurare GRID: 2 Coloane egale (weight=1 înseamnă 50% fiecare)
+        self.charts_frame.columnconfigure(0, weight=1) # Stânga
+        self.charts_frame.columnconfigure(1, weight=1) # Dreapta
+        self.charts_frame.rowconfigure(0, weight=1)    # Înălțime maximă
+
+        # Frame Stânga (Pie)
+        self.fr_left = ttk.Frame(self.charts_frame, padding=10)
+        self.fr_left.grid(row=0, column=0, sticky="nsew") # nsew = lipit de toate laturile
+
+        # Frame Dreapta (Bar)
+        self.fr_right = ttk.Frame(self.charts_frame, padding=10)
+        self.fr_right.grid(row=0, column=1, sticky="nsew")
 
     def refresh_dashboard(self):
+        # Curățăm complet widget-urile vechi pentru a nu se suprapune la resize
         for w in self.fr_left.winfo_children(): w.destroy()
         for w in self.fr_right.winfo_children(): w.destroy()
         
+        # Închidem figurile anterioare din memorie pentru a evita memory leaks
+        plt.close('all')
+
         try:
-            conn = self.get_conn(); cur = conn.cursor()
+            conn = self.get_conn()
+            cur = conn.cursor()
             
-            # Pie Chart
+            # --- GRAFIC 1: PIE CHART (Stânga) ---
             cur.execute("SELECT d.oras, SUM(s.cantitate * s.pret_minim) FROM STOC s JOIN DEPOZIT d ON s.depozit_id = d.depozit_id GROUP BY d.oras")
             labels, sizes = [], []
             for r in cur: 
-                if r[1]: labels.append(r[0]); sizes.append(r[1])
+                if r[1] and r[1] > 0: 
+                    labels.append(r[0])
+                    sizes.append(r[1])
             
-            fig1, ax1 = plt.subplots(figsize=(5,4), dpi=100)
-            ax1.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=90, colors=['#3498db','#e74c3c','#2ecc71'])
-            ax1.set_title("Valoare Stoc / Oraș")
-            FigureCanvasTkAgg(fig1, self.fr_left).get_tk_widget().pack(fill=BOTH, expand=YES)
+            # figsize=(5,4) este raportul de aspect, nu mărimea fixă în pixeli. Tkinter îl va scala.
+            fig1, ax1 = plt.subplots(figsize=(5, 4), dpi=100)
+            
+            if sizes:
+                # 'autopct' formatează procentele. 'textprops' mărește fontul
+                ax1.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=90, 
+                        colors=['#3498db','#e74c3c','#2ecc71'], textprops={'fontsize': 9})
+            else:
+                ax1.text(0.5, 0.5, "Nu există date", ha='center')
 
-            # Bar Chart
+            ax1.set_title("Valoare Stoc / Oraș", fontsize=11, fontweight='bold')
+            
+            # ACEASTA ESTE LINIA MAGICĂ: Previne tăierea textelor
+            fig1.tight_layout()
+
+            canvas1 = FigureCanvasTkAgg(fig1, self.fr_left)
+            canvas1.draw()
+            canvas1.get_tk_widget().pack(fill=BOTH, expand=YES)
+
+            # --- GRAFIC 2: BAR CHART (Dreapta) ---
             cur.execute("SELECT p.denumire, SUM(s.cantitate) FROM STOC s JOIN PRODUS p ON s.produs_id = p.produs_id GROUP BY p.denumire ORDER BY SUM(s.cantitate) DESC FETCH FIRST 5 ROWS ONLY")
             prods, qtys = [], []
-            for r in cur: prods.append(r[0][:10]+".."); qtys.append(r[1])
+            for r in cur: 
+                # Scurtăm numele lungi ca să nu strice graficul
+                name = r[0]
+                if len(name) > 15: name = name[:12] + "..."
+                prods.append(name)
+                qtys.append(r[1])
             
-            fig2, ax2 = plt.subplots(figsize=(5,4), dpi=100)
-            ax2.bar(prods, qtys, color='#18bc9c')
-            ax2.set_title("Top 5 Produse (Cantitate)")
-            FigureCanvasTkAgg(fig2, self.fr_right).get_tk_widget().pack(fill=BOTH, expand=YES)
+            fig2, ax2 = plt.subplots(figsize=(5, 4), dpi=100)
+            bars = ax2.bar(prods, qtys, color='#18bc9c')
+            
+            ax2.set_title("Top 5 Produse (Cantitate)", fontsize=11, fontweight='bold')
+            # Rotim etichetele de jos ca să nu se încalece
+            ax2.tick_params(axis='x', rotation=25, labelsize=9)
+            
+            fig2.tight_layout() # Ajustare automată a marginilor
+            
+            canvas2 = FigureCanvasTkAgg(fig2, self.fr_right)
+            canvas2.draw()
+            canvas2.get_tk_widget().pack(fill=BOTH, expand=YES)
             
             conn.close()
-        except: plt.close('all')
+        except Exception as e:
+            print(f"Eroare dashboard: {e}")
+            plt.close('all')
 
     # --- CLIENTI ---
     def build_clienti_ui(self):
