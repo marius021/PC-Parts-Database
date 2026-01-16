@@ -85,7 +85,10 @@ pip install oracledb
 
 S-a implementat o varianta mai simpla, functionala, cu interfata pentru Admin si pentru Agentul de vanzari.
 -- IMBUNATATIRI ( TO BE TESTED )
-* De adaugat filtru pentru comenzile anulate
+* Generare Factură PDF (Esențial pentru Retail)
+🚨 Sistem de Alerte Stoc Critic (Supply Chain)
+🛡️ Jurnal de Audit (Audit Log - Securitate)
+📉 Export Date (Interoperabilitate)
 * Dezvoltare UI/UX - eventual extensie
 * Evntuale idei pentru implementarea unei aplicatii stand alone pe pc? java?
 * Dezvoltare idei pentru o aplicatie de mobil? Flutter/Android Studio?
