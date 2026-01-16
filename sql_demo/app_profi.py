@@ -7,6 +7,10 @@ import oracledb
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
+# ==== Import nou pentru imagini =======
+from PIL import Image, ImageTk
+import os #Pentru a construi calea corecta catre fisier
+
 # ================= CONFIGURARE DATABASE =================
 DB_USER = "AGENT_VANZARI"
 DB_PASS = "parolaagent123"
@@ -17,8 +21,24 @@ class MainApp(ttk.Window):
     def __init__(self):
         # Folosim tema "flatly" pentru aspect corporate modern
         super().__init__(themename="flatly")
-        self.title("PC Parts Manager ERP v3.0")
+        self.title("Maurice PC Parts Shop")
         self.geometry("1100x750")
+        
+        # === COD pentru SETARE ICONIȚĂ APLICAȚIE ===
+        try:
+            # 1. Aflăm unde se află exact acest fișier .py
+            base_folder = os.path.dirname(os.path.abspath(__file__))
+            # 2. Construim calea către poză pornind de la script
+            img_path = os.path.join(base_folder, "assets", "logo.png")
+            
+            # Verificăm în consolă dacă calea e bună (pentru debug)
+            print(f"Caut imaginea la: {img_path}")
+
+            img = Image.open(img_path)
+            photo = ImageTk.PhotoImage(img)
+            self.iconphoto(True, photo)
+        except Exception as e:
+            print(f"Nu s-a putut încărca iconița: {e}")
         
         self.container = ttk.Frame(self)
         self.container.pack(fill=BOTH, expand=YES)
@@ -49,9 +69,31 @@ class LoginPage(ttk.Frame):
         # Centrare cu un card
         center_frame = ttk.Frame(self)
         center_frame.place(relx=0.5, rely=0.5, anchor=CENTER)
+        
+        # === COD NOU: LOGO MARE ===
+        try:
+            # 1. Aflăm calea corectă din nou
+            base_folder = os.path.dirname(os.path.abspath(__file__))
+            img_path = os.path.join(base_folder, "assets", "logo.png")
+            
+            load = Image.open(img_path)
+            
+            # Redimensionare
+            load = load.resize((150, 150), Image.Resampling.LANCZOS)
+            self.logo_img = ImageTk.PhotoImage(load)
+            
+            img_label = ttk.Label(center_frame, image=self.logo_img)
+            img_label.pack(pady=(0, 20))
+            
+        except Exception as e:
+            print(f"Eroare logo login: {e}")
+            # Fallback text dacă tot nu merge
+            ttk.Label(center_frame, text="PC PARTS", font=("Arial", 20, "bold")).pack(pady=20)
+        # ==========================
 
+        # Titlu Text (Sub Logo)
+        ttk.Label(center_frame, text="PC PARTS MANAGER", font=("Helvetica", 24, "bold"), bootstyle="primary").pack(pady=(0, 10))
         # Logo / Titlu
-        ttk.Label(center_frame, text="PC PARTS MANAGER", font=("Helvetica", 28, "bold"), bootstyle="primary").pack(pady=(0, 10))
         ttk.Label(center_frame, text="Enterprise Resource Planning System", font=("Helvetica", 12), bootstyle="secondary").pack(pady=(0, 40))
         
         # Butoane Login Mari
