@@ -11,6 +11,12 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from PIL import Image, ImageTk
 import os #Pentru a construi calea corecta catre fisier
 
+# ==== IMPORTURI NOI PENTRU PDF ====
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import A4
+from reportlab.lib import colors
+from datetime import datetime
+
 # ================= CONFIGURARE DATABASE =================
 DB_USER = "AGENT_VANZARI"
 DB_PASS = "parolaagent123"
@@ -437,13 +443,41 @@ class AdminPage(ttk.Frame):
 
     def ch_stat(self, st):
         sel = self.tr_cmd.selection()
-        if not sel: return
-        cid = self.tr_cmd.item(sel[0])['values'][0]
+        if not sel: 
+            messagebox.showwarning("!", "Selectează o comandă!")
+            return
+            
+        cid = self.tr_cmd.item(sel[0])['values'][0] # ID-ul comenzii
+        
         try:
-            conn=self.get_conn(); cur=conn.cursor()
+            conn = self.get_conn()
+            cur = conn.cursor()
+            # 1. Actualizam statusul in DB (Procedura va genera si AWB daca e cazul)
             cur.callproc("ADMIN_UPDATE_STATUS_COMANDA", [cid, st])
-            conn.close(); self.refresh_comenzi(); messagebox.showinfo("Ok", f"Status: {st}")
-        except Exception as e: messagebox.showerror("Err", str(e))
+            conn.close()
+            
+            # 2. Refresh UI
+            self.refresh_comenzi()
+            
+            msg = f"Status actualizat: {st}"
+            
+            # 3. Daca e Finalizata, generam Factura PDF
+            if st == "Finalizata":
+                ok, rezultat = generate_invoice_pdf(cid)
+                if ok:
+                    msg += f"\n\n📄 Factura a fost generată:\n{rezultat}"
+                    # Optional: Deschide automat PDF-ul (merge pe Windows)
+                    try:
+                        os.startfile(rezultat)
+                    except:
+                        pass
+                else:
+                    msg += f"\n\n⚠️ Eroare generare PDF: {rezultat}"
+
+            messagebox.showinfo("Succes", msg)
+
+        except Exception as e:
+            messagebox.showerror("Err", str(e))
 
 # ================= AGENT PAGE (PROFI) =================
 class AgentPage(ttk.Frame):
@@ -515,7 +549,133 @@ class AgentPage(ttk.Frame):
             cur.callproc("ADAUGA_COMANDA_COMPLETA", [cid, pid, qty, self.cb_liv.get(), 0])
             conn.close(); messagebox.showinfo("Succes", "Vandut!"); self.refresh_data()
         except Exception as e: messagebox.showerror("Err", str(e))
+        
+# === implementare logica pentru generare factura in format PDF
+    
+def generate_invoice_pdf(cv_id):
+    try:
+            # 1. Conectare la DB pentru a lua datele complete
+            conn = oracledb.connect(user=DB_USER, password=DB_PASS, dsn=DB_DSN)
+            cur = conn.cursor()
 
+            # Date Antet Comandă + Client
+            sql_head = """
+                SELECT c.nume, c.cod_fiscal, c.tara, cv.data_creare, cv.awb, cv.valoare_totala
+                FROM V_ISTORIC_SUMAR cv
+                JOIN CLIENT c ON cv.nume_client = c.nume -- Simplificare pt demo (in prod legam prin ID)
+                WHERE cv.cv_id = :1
+            """
+            # Nota: In V_ISTORIC_SUMAR am numele clientului. 
+            # Ca sa fim 100% corecti ar trebui sa facem join pe ID, dar merge si asa pentru demo.
+            
+            cur.execute(sql_head, [cv_id])
+            head_row = cur.fetchone()
+            
+            if not head_row:
+                return False, "Comanda nu a fost găsită!"
+
+            client_nume, client_fiscal, client_tara, data_cmd, awb, total_grand = head_row
+            
+            # Formatare nume fisier
+            filename = f"Factura_{cv_id}.pdf"
+            base_folder = os.path.dirname(os.path.abspath(__file__))
+            pdf_path = os.path.join(base_folder, filename)
+            logo_path = os.path.join(base_folder, "assets", "logo.png")
+
+            # 2. Creare Canvas PDF (A4)
+            c = canvas.Canvas(pdf_path, pagesize=A4)
+            width, height = A4
+
+            # --- HEADER ---
+            # Logo
+            if os.path.exists(logo_path):
+                c.drawImage(logo_path, 30, height - 100, width=100, height=50, preserveAspectRatio=True, mask='auto')
+            else:
+                c.setFont("Helvetica-Bold", 14)
+                c.drawString(30, height - 80, "PC PARTS MANAGER")
+
+            # Titlu Factura (Dreapta)
+            c.setFont("Helvetica-Bold", 24)
+            c.drawRightString(width - 30, height - 60, "FACTURA FISCALA")
+            
+            c.setFont("Helvetica", 10)
+            c.drawRightString(width - 30, height - 80, f"Nr: {cv_id}")
+            c.drawRightString(width - 30, height - 95, f"Data: {data_cmd.strftime('%d-%m-%Y')}")
+            if awb:
+                c.drawRightString(width - 30, height - 110, f"AWB: {awb}")
+
+            # Linie separatoare
+            c.setStrokeColor(colors.grey)
+            c.line(30, height - 130, width - 30, height - 130)
+
+            # --- DATE CLIENT ---
+            c.setFont("Helvetica-Bold", 12)
+            c.drawString(30, height - 160, "Client:")
+            c.setFont("Helvetica", 12)
+            c.drawString(30, height - 180, f"Nume: {client_nume}")
+            c.drawString(30, height - 200, f"C.I.F.: {client_fiscal}")
+            c.drawString(30, height - 220, f"Adresa: {client_tara}") # Tara ca simplificare pt adresa
+
+            # --- TABEL PRODUSE ---
+            y = height - 270
+            # Header Tabel
+            c.setFillColor(colors.lightgrey)
+            c.rect(30, y, width - 60, 20, fill=True, stroke=False)
+            c.setFillColor(colors.black)
+            c.setFont("Helvetica-Bold", 10)
+            
+            c.drawString(40, y + 6, "Produs")
+            c.drawRightString(350, y + 6, "Cant.")
+            c.drawRightString(450, y + 6, "Pret Unit")
+            c.drawRightString(width - 40, y + 6, "Total (RON)")
+            
+            y -= 20 # Coboram pentru linii
+
+            # Linii Comanda din DB
+            sql_lines = """
+                SELECT p.denumire, l.cantitate, l.pret_unitar
+                FROM CV_LINIE l
+                JOIN PRODUS p ON l.produs_id = p.produs_id
+                WHERE l.cv_id = :1
+            """
+            cur.execute(sql_lines, [cv_id])
+            
+            c.setFont("Helvetica", 10)
+            for row in cur:
+                prod_nume, cant, pret = row
+                linie_total = cant * pret
+                
+                # Trunchiere nume lung
+                if len(prod_nume) > 35: prod_nume = prod_nume[:32] + "..."
+                
+                c.drawString(40, y - 15, prod_nume)
+                c.drawRightString(350, y - 15, str(cant))
+                c.drawRightString(450, y - 15, f"{pret:.2f}")
+                c.drawRightString(width - 40, y - 15, f"{linie_total:.2f}")
+                
+                # Linie fina sub produs
+                c.setStrokeColor(colors.lightgrey)
+                c.line(30, y - 20, width - 30, y - 20)
+                
+                y -= 25 # Pasul urmator
+
+            # --- TOTAL GENERAL ---
+            y -= 20
+            c.setFont("Helvetica-Bold", 14)
+            c.drawRightString(width - 40, y - 20, f"TOTAL DE PLATA: {total_grand:.2f} RON")
+
+            # Footer
+            c.setFont("Helvetica-Oblique", 8)
+            c.drawCentredString(width / 2, 30, "Document generat automat de PC Parts Manager ERP")
+
+            c.save()
+            conn.close()
+            return True, pdf_path
+
+    except Exception as e:
+         return False, str(e)
+        
+    
 if __name__ == "__main__":
     app = MainApp()
     app.mainloop()
