@@ -137,17 +137,20 @@ class AdminPage(ttk.Frame):
         self.tab_clienti = ttk.Frame(self.notebook, padding=20)
         self.tab_produse = ttk.Frame(self.notebook, padding=20)
         self.tab_comenzi = ttk.Frame(self.notebook, padding=20)
+        self.tab_security = ttk.Frame(self.notebook, padding=20)
 
         self.notebook.add(self.tab_dashboard, text="📊 Dashboard")
         self.notebook.add(self.tab_clienti, text="👥 Clienți")
         self.notebook.add(self.tab_produse, text="📦 Catalog & Stoc")
         self.notebook.add(self.tab_comenzi, text="🚚 Comenzi")
+        self.notebook.add(self.tab_security, text="🛡️ Securitate")
 
         # Initializare UI
         self.build_dashboard_ui()
         self.build_clienti_ui()
         self.build_produse_ui()
         self.build_comenzi_ui()
+        self.build_security_ui()
         
         self.notebook.bind("<<NotebookTabChanged>>", self.on_tab_change)
 
@@ -157,6 +160,7 @@ class AdminPage(ttk.Frame):
         elif idx == 1: self.refresh_clienti()
         elif idx == 2: self.refresh_produse_data()
         elif idx == 3: self.refresh_comenzi()
+        elif idx == 4: self.refresh_audit()
     
     def get_conn(self): return oracledb.connect(user=DB_USER, password=DB_PASS, dsn=DB_DSN)
 
@@ -478,6 +482,59 @@ class AdminPage(ttk.Frame):
 
         except Exception as e:
             messagebox.showerror("Err", str(e))
+            
+    # --- SECURITATE / AUDIT ---
+    def build_security_ui(self):
+        # Titlu și Descriere
+        header = ttk.Frame(self.tab_security)
+        header.pack(fill=X, pady=(0, 10))
+        ttk.Label(header, text="Jurnal de Audit (Audit Log)", font=("Helvetica", 16, "bold"), bootstyle="inverse-danger").pack(side=LEFT, padx=10, pady=10)
+        ttk.Label(header, text="Monitorizează automat modificările critice (Preț/Stoc) prin Triggere Oracle.", bootstyle="secondary").pack(side=LEFT, padx=10)
+        
+        # Buton Refresh
+        ttk.Button(header, text="🔄 Actualizare Jurnal", bootstyle="outline", command=self.refresh_audit).pack(side=RIGHT, padx=10)
+
+        # Tabel Audit
+        cols = ("ID", "DATA", "USER", "ACTIUNE", "TABELA", "DETALII")
+        self.tr_audit = ttk.Treeview(self.tab_security, columns=cols, show="headings", bootstyle="danger")
+        
+        self.tr_audit.heading("ID", text="ID"); self.tr_audit.column("ID", width=50, anchor=CENTER)
+        self.tr_audit.heading("DATA", text="Data/Ora"); self.tr_audit.column("DATA", width=120, anchor=CENTER)
+        self.tr_audit.heading("USER", text="Utilizator DB"); self.tr_audit.column("USER", width=100, anchor=CENTER)
+        self.tr_audit.heading("ACTIUNE", text="Tip Acțiune"); self.tr_audit.column("ACTIUNE", width=100, anchor=CENTER)
+        self.tr_audit.heading("TABELA", text="Tabela"); self.tr_audit.column("TABELA", width=80, anchor=CENTER)
+        self.tr_audit.heading("DETALII", text="Detalii Modificare"); self.tr_audit.column("DETALII", width=400)
+        
+        # Scrollbar
+        sb = ttk.Scrollbar(self.tab_security, orient="vertical", command=self.tr_audit.yview)
+        self.tr_audit.configure(yscroll=sb.set)
+        
+        self.tr_audit.pack(side=LEFT, fill=BOTH, expand=YES)
+        sb.pack(side=RIGHT, fill=Y)
+
+    def refresh_audit(self):
+        for i in self.tr_audit.get_children(): self.tr_audit.delete(i)
+        try:
+            conn = self.get_conn()
+            cur = conn.cursor()
+            
+            # Luăm ultimele 50 de acțiuni
+            sql = """
+                SELECT audit_id, data_actiune, nume_utilizator, tip_actiune, tabela_afectata, detalii 
+                FROM AUDIT_LOG 
+                ORDER BY audit_id DESC 
+                FETCH FIRST 50 ROWS ONLY
+            """
+            cur.execute(sql)
+            
+            for row in cur:
+                # Formatare dată
+                data_str = row[1].strftime('%d-%m-%Y %H:%M') if row[1] else ""
+                self.tr_audit.insert("", END, values=(row[0], data_str, row[2], row[3], row[4], row[5]))
+            
+            conn.close()
+        except Exception as e:
+            print(f"Eroare audit: {e}")
 
 # ================= AGENT PAGE (PROFI) =================
 class AgentPage(ttk.Frame):
