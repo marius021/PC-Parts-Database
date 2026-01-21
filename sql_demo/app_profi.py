@@ -17,6 +17,9 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib import colors
 from datetime import datetime
 
+from tkinter import filedialog # <--- PENTRU A ALEGE UNDE SALVĂM
+import csv # <--- PENTRU SCRIEREA FIȘIERULUI
+
 # ================= CONFIGURARE DATABASE =================
 DB_USER = "AGENT_VANZARI"
 DB_PASS = "parolaagent123"
@@ -415,8 +418,18 @@ class AdminPage(ttk.Frame):
         self.cb_cfilt = ttk.Combobox(frm_filt, values=["Toate","In Asteptare","In Procesare","Finalizata","Anulata"], state="readonly")
         self.cb_cfilt.current(0); self.cb_cfilt.pack(side=LEFT, padx=5)
         self.cb_cfilt.bind("<<ComboboxSelected>>", lambda e: self.refresh_comenzi())
-        ttk.Button(frm_filt, text="Refresh", bootstyle="link", command=self.refresh_comenzi).pack(side=RIGHT)
+        
+        # === BUTOANE DREAPTA (REFRESH + EXPORT) ===
+        # Folosim un frame mic pentru a le grupa
+        fr_btns = ttk.Frame(frm_filt)
+        fr_btns.pack(side=RIGHT)
 
+        ttk.Button(fr_btns, text="💾 Export CSV", bootstyle="success-outline", 
+                   command=lambda: self.export_data(self.tr_cmd, "Raport_Comenzi")).pack(side=LEFT, padx=5)
+                   
+        ttk.Button(fr_btns, text="🔄 Refresh", bootstyle="link", 
+                   command=self.refresh_comenzi).pack(side=LEFT)
+        
         self.tr_cmd = ttk.Treeview(self.tab_comenzi, columns=("ID","CLIENT","DATA","LIV","AWB","TOT","STAT"), show="headings", bootstyle="primary")
         self.tr_cmd.heading("ID", text="ID"); self.tr_cmd.column("ID", width=50)
         self.tr_cmd.heading("CLIENT", text="Client"); self.tr_cmd.column("CLIENT", width=120)
@@ -482,18 +495,63 @@ class AdminPage(ttk.Frame):
 
         except Exception as e:
             messagebox.showerror("Err", str(e))
+    
+    def export_data(self, treeview, filename_prefix):
+        """ Funcție generică pentru exportul datelor dintr-un tabel în CSV """
+        try:
+            # 1. Cerem utilizatorului unde să salveze fișierul
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M")
+            filename = f"{filename_prefix}_{timestamp}.csv"
+            
+            filepath = filedialog.asksaveasfilename(
+                defaultextension=".csv",
+                initialfile=filename,
+                filetypes=[("CSV Files", "*.csv"), ("All Files", "*.*")],
+                title="Salvează Raportul"
+            )
+            
+            if not filepath: return # Utilizatorul a dat Cancel
+
+            # 2. Scriem datele
+            with open(filepath, mode='w', newline='', encoding='utf-8') as f:
+                writer = csv.writer(f)
+                
+                # A. Scriem Antetul (Coloanele)
+                cols = [treeview.heading(c)['text'] for c in treeview['columns']]
+                writer.writerow(cols)
+                
+                # B. Scriem Rândurile
+                for item in treeview.get_children():
+                    row = treeview.item(item)['values']
+                    writer.writerow(row)
+            
+            messagebox.showinfo("Succes", f"Date exportate cu succes în:\n{filepath}")
+            
+            # Optional: Deschidem fișierul automat (Windows)
+            try: os.startfile(filepath)
+            except: pass
+
+        except Exception as e:
+            messagebox.showerror("Eroare Export", str(e))
             
     # --- SECURITATE / AUDIT ---
     def build_security_ui(self):
         # Titlu și Descriere
         header = ttk.Frame(self.tab_security)
         header.pack(fill=X, pady=(0, 10))
-        ttk.Label(header, text="Jurnal de Audit (Audit Log)", font=("Helvetica", 16, "bold"), bootstyle="inverse-danger").pack(side=LEFT, padx=10, pady=10)
-        ttk.Label(header, text="Monitorizează automat modificările critice (Preț/Stoc) prin Triggere Oracle.", bootstyle="secondary").pack(side=LEFT, padx=10)
         
-        # Buton Refresh
-        ttk.Button(header, text="🔄 Actualizare Jurnal", bootstyle="outline", command=self.refresh_audit).pack(side=RIGHT, padx=10)
+        ttk.Label(header, text="Jurnal de Audit", font=("Helvetica", 16, "bold"), bootstyle="inverse-danger").pack(side=LEFT, padx=10, pady=10)
+        
+        # === ZONA BUTOANE DREAPTA ===
+        fr_btns = ttk.Frame(header)
+        fr_btns.pack(side=RIGHT, padx=10)
 
+        ttk.Button(fr_btns, text="💾 Export Log", bootstyle="outline", 
+                   command=lambda: self.export_data(self.tr_audit, "Security_Log")).pack(side=LEFT, padx=5)
+                   
+        ttk.Button(fr_btns, text="🔄 Actualizare", bootstyle="outline", 
+                   command=self.refresh_audit).pack(side=LEFT)
+        
         # Tabel Audit
         cols = ("ID", "DATA", "USER", "ACTIUNE", "TABELA", "DETALII")
         self.tr_audit = ttk.Treeview(self.tab_security, columns=cols, show="headings", bootstyle="danger")
