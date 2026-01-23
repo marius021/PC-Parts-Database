@@ -599,71 +599,210 @@ class AgentPage(ttk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent)
         self.controller = controller
-        
+        self.cart = [] # Lista locală pentru coș: [{'id': 1, 'nume': 'CPU', 'qty': 2, 'pret': 100}, ...]
+        self.cli_map = {}
+        self.prd_data = {}
+
+        # --- NAVBAR ---
         nav = ttk.Frame(self, bootstyle="info"); nav.pack(side=TOP, fill=X)
-        ttk.Label(nav, text="  MODUL VÂNZĂRI", font=("Helvetica", 14, "bold"), bootstyle="inverse-info").pack(side=LEFT, pady=15)
+        ttk.Label(nav, text="  MODUL VÂNZĂRI (POS)", font=("Helvetica", 14, "bold"), bootstyle="inverse-info").pack(side=LEFT, pady=15)
         ttk.Button(nav, text="Ieșire", bootstyle="light-outline", command=lambda: controller.show_frame("LoginPage")).pack(side=RIGHT, padx=20)
 
-        main = ttk.Frame(self, padding=20); main.pack(fill=BOTH, expand=YES)
+        # --- CONTENT ---
+        main = ttk.Frame(self, padding=10); main.pack(fill=BOTH, expand=YES)
         
-        # Stanga: Formular
-        frm_l = ttk.Labelframe(main, text="Vânzare Nouă", padding=20); frm_l.pack(side=LEFT, fill=BOTH, expand=YES, padx=(0, 10))
-        
-        ttk.Label(frm_l, text="Client:").pack(anchor=W); self.cb_cli = ttk.Combobox(frm_l, state="readonly"); self.cb_cli.pack(fill=X, pady=5)
-        ttk.Label(frm_l, text="Produs:").pack(anchor=W); self.cb_prd = ttk.Combobox(frm_l, state="readonly"); self.cb_prd.pack(fill=X, pady=5)
-        self.lbl_stoc = ttk.Label(frm_l, text="Stoc: -", bootstyle="secondary"); self.lbl_stoc.pack(anchor=W)
-        self.cb_prd.bind("<<ComboboxSelected>>", self.on_prod)
-        
-        f2 = ttk.Frame(frm_l); f2.pack(fill=X, pady=10)
-        ttk.Label(f2, text="Cantitate:").pack(side=LEFT)
-        self.en_qty = ttk.Entry(f2, width=8); self.en_qty.pack(side=LEFT, padx=5); self.en_qty.insert(0,"1")
-        self.en_qty.bind("<KeyRelease>", self.calc)
-        
-        ttk.Label(frm_l, text="Livrare:").pack(anchor=W); self.cb_liv = ttk.Combobox(frm_l, values=["Ridicare Personala","Curier Rapid"], state="readonly"); self.cb_liv.current(0); self.cb_liv.pack(fill=X, pady=5)
-        
-        # Dreapta: Sumar
-        frm_r = ttk.Labelframe(main, text="Sumar & Plată", padding=20); frm_r.pack(side=RIGHT, fill=BOTH, expand=YES)
-        
-        self.lbl_total = ttk.Label(frm_r, text="0.00 RON", font=("Helvetica", 24, "bold"), bootstyle="success"); self.lbl_total.pack(pady=40)
-        ttk.Button(frm_r, text="✅ PLASEAZĂ COMANDA", bootstyle="success", command=self.save).pack(fill=X, pady=20)
+        # === ZONA STÂNGA: SELECTOR ===
+        frm_left = ttk.Labelframe(main, text="Selecție Produse", padding=15)
+        frm_left.pack(side=LEFT, fill=BOTH, expand=YES, padx=(0, 10))
 
-        self.cli_map={}; self.prd_data={}
+        # Client & Livrare
+        ttk.Label(frm_left, text="Client:").pack(anchor=W)
+        self.cb_cli = ttk.Combobox(frm_left, state="readonly"); self.cb_cli.pack(fill=X, pady=5)
+        
+        ttk.Label(frm_left, text="Metoda Livrare:").pack(anchor=W)
+        self.cb_liv = ttk.Combobox(frm_left, values=["Ridicare Personala", "Curier Rapid"], state="readonly")
+        self.cb_liv.current(0); self.cb_liv.pack(fill=X, pady=5)
 
+        ttk.Separator(frm_left).pack(fill=X, pady=15)
+
+        # Produs
+        ttk.Label(frm_left, text="Produs:").pack(anchor=W)
+        self.cb_prd = ttk.Combobox(frm_left, state="readonly"); self.cb_prd.pack(fill=X, pady=5)
+        self.cb_prd.bind("<<ComboboxSelected>>", self.on_prod_select)
+        
+        # Info Stoc & Pret
+        self.lbl_info = ttk.Label(frm_left, text="Preț: 0.00 RON | Stoc: -", bootstyle="secondary")
+        self.lbl_info.pack(anchor=W, pady=5)
+
+        # Cantitate & Buton Add
+        f_qty = ttk.Frame(frm_left)
+        f_qty.pack(fill=X, pady=10)
+        ttk.Label(f_qty, text="Cantitate:").pack(side=LEFT)
+        self.en_qty = ttk.Entry(f_qty, width=10); self.en_qty.pack(side=LEFT, padx=10); self.en_qty.insert(0, "1")
+        
+        ttk.Button(frm_left, text="⬇️ Adaugă în Coș", bootstyle="warning", command=self.add_to_cart).pack(fill=X, pady=10)
+
+        # === ZONA DREAPTA: COȘ CUMPĂRĂTURI ===
+        frm_right = ttk.Labelframe(main, text="Coș Cumpărături", padding=10)
+        frm_right.pack(side=RIGHT, fill=BOTH, expand=YES)
+
+        # Tabel Coș
+        cols = ("NUME", "QTY", "PRET", "TOTAL")
+        self.tr_cart = ttk.Treeview(frm_right, columns=cols, show="headings", height=10, bootstyle="info")
+        self.tr_cart.heading("NUME", text="Produs"); self.tr_cart.column("NUME", width=150)
+        self.tr_cart.heading("QTY", text="Cant."); self.tr_cart.column("QTY", width=50, anchor=CENTER)
+        self.tr_cart.heading("PRET", text="Preț Unit."); self.tr_cart.column("PRET", width=80, anchor=E)
+        self.tr_cart.heading("TOTAL", text="Total Linie"); self.tr_cart.column("TOTAL", width=80, anchor=E)
+        self.tr_cart.pack(fill=BOTH, expand=YES)
+
+        # Butoane Coș
+        btn_frm = ttk.Frame(frm_right, padding=5)
+        btn_frm.pack(fill=X)
+        ttk.Button(btn_frm, text="Șterge Linie", bootstyle="danger-outline", command=self.remove_item).pack(side=LEFT)
+        
+        # Zona Total & Finalizare
+        self.lbl_grand_total = ttk.Label(frm_right, text="TOTAL: 0.00 RON", font=("Helvetica", 18, "bold"), bootstyle="success")
+        self.lbl_grand_total.pack(pady=10, anchor=E)
+        
+        ttk.Button(frm_right, text="✅ FINALIZEAZĂ COMANDA", bootstyle="success", command=self.submit_order).pack(fill=X, pady=10)
+
+    # --- LOGICA ---
     def get_conn(self): return oracledb.connect(user=DB_USER, password=DB_PASS, dsn=DB_DSN)
-    
+
     def refresh_data(self):
+        """ Încarcă clienții și produsele din DB """
+        self.cart = [] # Resetare coș la intrare
+        self.refresh_cart_ui()
         try:
-            conn=self.get_conn(); cur=conn.cursor()
-            cur.execute("SELECT client_id, nume FROM CLIENT"); self.cli_map={r[1]:r[0] for r in cur}
-            self.cb_cli['values']=list(self.cli_map.keys())
+            conn = self.get_conn(); cur = conn.cursor()
+            
+            # Clienți
+            cur.execute("SELECT client_id, nume FROM CLIENT")
+            self.cli_map = {r[1]: r[0] for r in cur}
+            self.cb_cli['values'] = list(self.cli_map.keys())
+            if self.cb_cli['values']: self.cb_cli.current(0)
+
+            # Produse (doar cele cu stoc > 0 în depozit central)
             cur.execute("SELECT p.produs_id, p.denumire, s.pret_minim, s.cantitate FROM PRODUS p JOIN STOC s ON p.produs_id=s.produs_id WHERE s.depozit_id=1")
-            self.prd_data={r[1]:{'id':r[0],'pr':r[2],'st':r[3]} for r in cur}
-            self.cb_prd['values']=list(self.prd_data.keys())
+            self.prd_data = {r[1]: {'id': r[0], 'pret': r[2], 'stoc': r[3]} for r in cur}
+            self.cb_prd['values'] = list(self.prd_data.keys())
+            
             conn.close()
         except: pass
 
-    def on_prod(self, e):
-        d = self.prd_data.get(self.cb_prd.get())
-        if d: 
-            self.lbl_stoc.config(text=f"Stoc: {d['st']} buc", bootstyle="danger" if d['st']<10 else "secondary")
-            self.calc()
+    def on_prod_select(self, event):
+        nume = self.cb_prd.get()
+        if nume in self.prd_data:
+            info = self.prd_data[nume]
+            color = "danger" if info['stoc'] < 5 else "secondary"
+            self.lbl_info.config(text=f"Preț: {info['pret']} RON | Stoc Disponibil: {info['stoc']} buc", bootstyle=color)
 
-    def calc(self, e=None):
-        try:
-            p = self.prd_data[self.cb_prd.get()]['pr']
-            q = int(self.en_qty.get())
-            self.lbl_total.config(text=f"{p*q:.2f} RON")
-        except: self.lbl_total.config(text="0.00 RON")
+    def add_to_cart(self):
+        nume = self.cb_prd.get()
+        qty_str = self.en_qty.get()
+        
+        if not nume or not qty_str.isdigit():
+            messagebox.showwarning("!", "Selectează produsul și introdu o cantitate validă.")
+            return
 
-    def save(self):
+        qty = int(qty_str)
+        info = self.prd_data[nume]
+
+        # Verificare Stoc Locală (Pre-DB)
+        if qty > info['stoc']:
+            messagebox.showerror("Stoc Insuficient", f"Ai cerut {qty}, dar avem doar {info['stoc']}!")
+            return
+
+        # Adăugare în listă (sau actualizare dacă există deja)
+        for item in self.cart:
+            if item['nume'] == nume:
+                if item['qty'] + qty > info['stoc']:
+                    messagebox.showerror("Eroare", "Depășești stocul total cu această adăugare!")
+                    return
+                item['qty'] += qty
+                self.refresh_cart_ui()
+                return
+
+        # Produs nou în coș
+        self.cart.append({
+            'id': info['id'],
+            'nume': nume,
+            'qty': qty,
+            'pret': info['pret']
+        })
+        self.refresh_cart_ui()
+
+    def remove_item(self):
+        sel = self.tr_cart.selection()
+        if sel:
+            idx = self.tr_cart.index(sel[0])
+            del self.cart[idx]
+            self.refresh_cart_ui()
+
+    def refresh_cart_ui(self):
+        # Curățare tabel
+        for i in self.tr_cart.get_children(): self.tr_cart.delete(i)
+        
+        total_global = 0
+        for item in self.cart:
+            line_total = item['qty'] * item['pret']
+            total_global += line_total
+            self.tr_cart.insert("", "end", values=(item['nume'], item['qty'], f"{item['pret']} RON", f"{line_total:.2f} RON"))
+        
+        self.lbl_grand_total.config(text=f"TOTAL: {total_global:.2f} RON")
+
+    def submit_order(self):
+        if not self.cart:
+            messagebox.showwarning("!", "Coșul este gol!")
+            return
+        
+        client_name = self.cb_cli.get()
+        if not client_name: 
+            messagebox.showwarning("!", "Selectează clientul!")
+            return
+
         try:
-            cid = self.cli_map[self.cb_cli.get()]
-            pid = self.prd_data[self.cb_prd.get()]['id']
-            qty = int(self.en_qty.get())
-            conn=self.get_conn(); cur=conn.cursor()
-            cur.callproc("ADAUGA_COMANDA_COMPLETA", [cid, pid, qty, self.cb_liv.get(), 0])
-            conn.close(); messagebox.showinfo("Succes", "Vandut!"); self.refresh_data()
-        except Exception as e: messagebox.showerror("Err", str(e))
+            conn = self.get_conn()
+            cur = conn.cursor()
+            
+            client_id = self.cli_map[client_name]
+            metoda_liv = self.cb_liv.get()
+
+            # PAS 1: Creare Comandă (Header) -> Primim ID-ul
+            # Trebuie să apelăm funcția SQL. În cx_oracle/oracledb funcțiile se apelează cu callfunc
+            new_cv_id = cur.callfunc("pcparts.AGENT_INIT_COMANDA", oracledb.NUMBER, [client_id, metoda_liv])
+
+            # PAS 2: Adăugare Linii
+            for item in self.cart:
+                cur.callproc("pcparts.AGENT_ADD_LINIE", [new_cv_id, item['id'], item['qty'], 0]) # 0 discount
+            
+            conn.close()
+            
+            # Succes
+            msg = f"Comanda #{new_cv_id} a fost salvată cu succes!"
+            
+            # --- GENERARE PDF AUTOMATĂ ---
+            # Deoarece avem deja funcția generate_invoice_pdf definită global în app_profi.py
+            # o putem apela și aici! (Dar trebuie să ne asigurăm că importul e vizibil sau funcția e accesibilă)
+            # Notă: Funcția generate_invoice_pdf caută în V_ISTORIC_SUMAR, care s-a updatat deja.
+            
+            try:
+                ok, path = generate_invoice_pdf(new_cv_id)
+                if ok:
+                    msg += f"\n\nFactura generată: {path}"
+                    os.startfile(path)
+            except Exception as e_pdf:
+                print(f"PDF Error: {e_pdf}")
+
+            messagebox.showinfo("Succes", msg)
+            
+            # Reset
+            self.cart = []
+            self.refresh_cart_ui()
+            self.refresh_data() # Reîmprospătăm stocurile din DB
+
+        except Exception as e:
+            messagebox.showerror("Eroare Bază de Date", str(e))
         
 # === implementare logica pentru generare factura in format PDF
     
