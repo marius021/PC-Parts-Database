@@ -51,7 +51,7 @@ class MainApp(tk.Tk):
             frame.grid(row=0, column=0, sticky="nsew")
             
         self.show_frame("LoginPage")
-
+        
     def show_frame(self, page_name):
         frame = self.frames[page_name]
         frame.tkraise()
