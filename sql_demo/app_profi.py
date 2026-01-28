@@ -141,12 +141,14 @@ class AdminPage(ttk.Frame):
         self.tab_produse = ttk.Frame(self.notebook, padding=20)
         self.tab_comenzi = ttk.Frame(self.notebook, padding=20)
         self.tab_security = ttk.Frame(self.notebook, padding=20)
+        self.tab_rma = ttk.Frame(self.notebook, padding=20)
 
         self.notebook.add(self.tab_dashboard, text="📊 Dashboard")
         self.notebook.add(self.tab_clienti, text="👥 Clienți")
         self.notebook.add(self.tab_produse, text="📦 Catalog & Stoc")
         self.notebook.add(self.tab_comenzi, text="🚚 Comenzi")
         self.notebook.add(self.tab_security, text="🛡️ Securitate")
+        self.notebook.add(self.tab_rma, text="🛠️ Retururi (RMA)")
 
         # Initializare UI
         self.build_dashboard_ui()
@@ -154,6 +156,7 @@ class AdminPage(ttk.Frame):
         self.build_produse_ui()
         self.build_comenzi_ui()
         self.build_security_ui()
+        self.build_rma_ui()
         
         self.notebook.bind("<<NotebookTabChanged>>", self.on_tab_change)
 
@@ -164,6 +167,7 @@ class AdminPage(ttk.Frame):
         elif idx == 2: self.refresh_produse_data()
         elif idx == 3: self.refresh_comenzi()
         elif idx == 4: self.refresh_audit()
+        elif idx == 5: self.refresh_rma()
     
     def get_conn(self): return oracledb.connect(user=DB_USER, password=DB_PASS, dsn=DB_DSN)
 
@@ -411,6 +415,7 @@ class AdminPage(ttk.Frame):
         ttk.Button(frm_act, text="În Procesare", bootstyle="secondary", command=lambda: self.ch_stat("In Procesare")).pack(side=LEFT, padx=5, expand=YES)
         ttk.Button(frm_act, text="Finalizează (+AWB)", bootstyle="success", command=lambda: self.ch_stat("Finalizata")).pack(side=LEFT, padx=5, expand=YES)
         ttk.Button(frm_act, text="Anulează", bootstyle="danger", command=lambda: self.ch_stat("Anulata")).pack(side=LEFT, padx=5, expand=YES)
+        ttk.Button(frm_act, text="⚠️ Deschide Retur", bootstyle="warning", command=self.open_rma_popup).pack(side=LEFT, padx=5, expand=YES)
 
         frm_filt = ttk.Frame(self.tab_comenzi, padding=10)
         frm_filt.pack(side=TOP, fill=X)
@@ -593,7 +598,107 @@ class AdminPage(ttk.Frame):
             conn.close()
         except Exception as e:
             print(f"Eroare audit: {e}")
+    # ================= RMA (RETURURI) =================
+    def build_rma_ui(self):
+        ttk.Label(self.tab_rma, text="Gestiune Retururi (RMA)", font=("Helvetica", 16, "bold")).pack(pady=10)
+        
+        # Tabel
+        cols = ("ID", "COMANDA", "PRODUS", "CLIENT", "MOTIV", "STATUS", "DATA")
+        self.tr_rma = ttk.Treeview(self.tab_rma, columns=cols, show="headings", bootstyle="warning")
+        
+        self.tr_rma.heading("ID", text="RMA #"); self.tr_rma.column("ID", width=50)
+        self.tr_rma.heading("COMANDA", text="Cmd #"); self.tr_rma.column("COMANDA", width=60)
+        self.tr_rma.heading("PRODUS", text="Produs"); self.tr_rma.column("PRODUS", width=150)
+        self.tr_rma.heading("CLIENT", text="Client"); self.tr_rma.column("CLIENT", width=120)
+        self.tr_rma.heading("MOTIV", text="Motiv"); self.tr_rma.column("MOTIV", width=200)
+        self.tr_rma.heading("STATUS", text="Status"); self.tr_rma.column("STATUS", width=100)
+        self.tr_rma.heading("DATA", text="Data"); self.tr_rma.column("DATA", width=100)
+        
+        self.tr_rma.pack(fill=BOTH, expand=YES)
+        
+        frm_btn = ttk.Frame(self.tab_rma, padding=10)
+        frm_btn.pack(fill=X)
+        ttk.Button(frm_btn, text="Refresh", command=self.refresh_rma).pack(side=RIGHT)
 
+    def refresh_rma(self):
+        for i in self.tr_rma.get_children(): self.tr_rma.delete(i)
+        try:
+            conn = self.get_conn(); cur = conn.cursor()
+            cur.execute("SELECT * FROM V_RMA_LIST")
+            for r in cur:
+                # r[6] este data_deschidere. Verificăm dacă e None
+                d = r[6].strftime('%d-%m-%Y') if r[6] else ""
+                self.tr_rma.insert("", END, values=(r[0], r[1], r[2], r[3], r[4], r[5], d))
+            conn.close()
+        except Exception as e: 
+            print(f"Eroare RMA: {e}")
+
+    def open_rma_popup(self):
+        # 1. Verificăm dacă a selectat o comandă
+        sel = self.tr_cmd.selection()
+        if not sel: 
+            messagebox.showwarning("!", "Selectează o comandă finalizată!")
+            return
+            
+        cv_id = self.tr_cmd.item(sel[0])['values'][0]
+        
+        # 2. Creăm fereastra Popup
+        top = ttk.Toplevel(title=f"Retur Comanda #{cv_id}")
+        top.geometry("400x350")
+        
+        ttk.Label(top, text="Selectează Produsul Defect:", font=("Bold", 10)).pack(pady=10)
+        
+        # 3. Încărcăm produsele din acea comandă
+        cb_prod = ttk.Combobox(top, state="readonly")
+        cb_prod.pack(fill=X, padx=20)
+        
+        prod_map = {}
+        try:
+            conn = self.get_conn()
+            cur = conn.cursor()
+            # Căutăm ce produse au fost vândute pe comanda asta
+            cur.execute("SELECT p.produs_id, p.denumire FROM CV_LINIE l JOIN PRODUS p ON l.produs_id=p.produs_id WHERE l.cv_id=:1", [cv_id])
+            for r in cur: 
+                prod_map[r[1]] = r[0] # Mapăm Nume -> ID
+            
+            cb_prod['values'] = list(prod_map.keys())
+            if cb_prod['values']: cb_prod.current(0)
+            conn.close()
+        except Exception as e:
+            print(f"Eroare incarcare produse RMA: {e}")
+        
+        # 4. Câmp pentru Motiv
+        ttk.Label(top, text="Motivul Returului:").pack(pady=(20, 5))
+        txt_motiv = ttk.Entry(top)
+        txt_motiv.pack(fill=X, padx=20)
+        
+        # 5. Funcția de Salvare (interioară)
+        def save_rma():
+            nume_produs = cb_prod.get()
+            pid = prod_map.get(nume_produs)
+            motiv = txt_motiv.get()
+            
+            if pid and motiv:
+                try:
+                    conn = self.get_conn()
+                    cur = conn.cursor()
+                    # Apelăm procedura SQL
+                    cur.callproc("ADMIN_CREAZA_RMA", [cv_id, pid, motiv])
+                    conn.close()
+                    
+                    top.destroy() # Închidem popup-ul
+                    messagebox.showinfo("Succes", "Dosar RMA deschis!")
+                    
+                    # Dăm refresh la tabelul RMA ca să vedem noul tichet
+                    self.refresh_rma() 
+                except Exception as e: 
+                    messagebox.showerror("Eroare SQL", str(e))
+            else:
+                messagebox.showwarning("!", "Completează toate câmpurile!")
+        
+        # 6. Butonul Final
+        ttk.Button(top, text="Înregistrează RMA", bootstyle="warning", command=save_rma).pack(pady=20)
+        
 # ================= AGENT PAGE (PROFI) =================
 class AgentPage(ttk.Frame):
     def __init__(self, parent, controller):
